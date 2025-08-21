@@ -19,21 +19,21 @@ import (
 type SecureHTTPClient struct {
 	client      *http.Client
 	pinnedCerts map[string]string // domain -> sha256 fingerprint
-	relayURL    string
+	baseURL     string
 }
 
 // NewSecureHTTPClient creates a new secure HTTP client with certificate pinning
-func NewSecureHTTPClient(relayURL string) (*SecureHTTPClient, error) {
-	parsedURL, err := url.Parse(relayURL)
+func NewSecureHTTPClient(baseURL string) (*SecureHTTPClient, error) {
+	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid relay URL: %w", err)
+		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
 
-	// Certificate fingerprints for known relay services
+	// Certificate fingerprints for known services
 	// NOTE: These should be updated with actual certificate fingerprints
 	pinnedCerts := map[string]string{
-		"gcal-oauth-relay.bnema.dev": "sha256:REPLACE_WITH_ACTUAL_CERT_FINGERPRINT",
-		"localhost":                  "", // Development - no pinning
+		"oauth2.googleapis.com": "", // Google OAuth2 - uses their CA
+		"localhost":             "", // Development - no pinning
 	}
 
 	tlsConfig := &tls.Config{
@@ -78,7 +78,7 @@ func NewSecureHTTPClient(relayURL string) (*SecureHTTPClient, error) {
 	return &SecureHTTPClient{
 		client:      client,
 		pinnedCerts: pinnedCerts,
-		relayURL:    relayURL,
+		baseURL:     baseURL,
 	}, nil
 }
 
@@ -164,14 +164,14 @@ func (sc *SecureHTTPClient) isAllowedURL(reqURL string) bool {
 		return false
 	}
 
-	parsedRelayURL, err := url.Parse(sc.relayURL)
+	parsedBaseURL, err := url.Parse(sc.baseURL)
 	if err != nil {
 		return false
 	}
 
-	// Must be same scheme and host as configured relay
-	return parsedReqURL.Scheme == parsedRelayURL.Scheme &&
-		parsedReqURL.Host == parsedRelayURL.Host
+	// Must be same scheme and host as configured base URL
+	return parsedReqURL.Scheme == parsedBaseURL.Scheme &&
+		parsedReqURL.Host == parsedBaseURL.Host
 }
 
 // validateResponse performs basic security validation on HTTP responses

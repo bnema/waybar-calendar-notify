@@ -2,7 +2,6 @@ package security
 
 import (
 	"fmt"
-	"time"
 )
 
 // ErrorSeverity represents the severity level of security errors
@@ -27,43 +26,6 @@ func (s ErrorSeverity) String() string {
 	}
 }
 
-// RelayError represents errors from the OAuth relay service
-type RelayError struct {
-	Operation string
-	Code      int
-	Message   string
-	Severity  ErrorSeverity
-	Timestamp time.Time
-	Err       error
-}
-
-func NewRelayError(operation, message string, code int, severity ErrorSeverity) *RelayError {
-	return &RelayError{
-		Operation: operation,
-		Code:      code,
-		Message:   message,
-		Severity:  severity,
-		Timestamp: time.Now(),
-	}
-}
-
-func (e *RelayError) Error() string {
-	if e.Code > 0 {
-		return fmt.Sprintf("[%s] relay %s failed (code %d): %s", 
-			e.Severity, e.Operation, e.Code, e.Message)
-	}
-	return fmt.Sprintf("[%s] relay %s failed: %s", 
-		e.Severity, e.Operation, e.Message)
-}
-
-func (e *RelayError) Unwrap() error {
-	return e.Err
-}
-
-func (e *RelayError) WithCause(err error) *RelayError {
-	e.Err = err
-	return e
-}
 
 // TokenError represents errors related to token operations
 type TokenError struct {
@@ -207,10 +169,7 @@ func (e *ValidationError) Error() string {
 
 // IsRetryableError determines if an error is retryable
 func IsRetryableError(err error) bool {
-	switch e := err.(type) {
-	case *RelayError:
-		// Retry on server errors (5xx) but not client errors (4xx)
-		return e.Code >= 500 && e.Code < 600
+	switch err.(type) {
 	case *TLSError:
 		// Don't retry TLS errors as they indicate configuration issues
 		return false
@@ -224,9 +183,7 @@ func IsRetryableError(err error) bool {
 
 // IsCriticalError determines if an error requires immediate attention
 func IsCriticalError(err error) bool {
-	switch e := err.(type) {
-	case *RelayError:
-		return e.Severity == SeverityCritical
+	switch err.(type) {
 	case *TLSError:
 		// TLS errors are always critical
 		return true
