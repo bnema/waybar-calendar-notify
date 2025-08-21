@@ -13,21 +13,18 @@ import (
 var (
 	revokeFlag bool
 	statusOnly bool
-	deviceFlow bool
 )
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage Google Calendar authentication",
-	Long: `Authenticate with Google Calendar API using either OAuth relay service or device flow.
+	Long: `Authenticate with Google Calendar API using OAuth 2.0 device flow.
 
-This command provides two authentication methods:
-1. Relay service (default): Seamless authentication without credential management
-2. Device flow (--device): For CLI applications and limited-input devices using device codes
+This command uses device flow authentication for CLI applications and limited-input devices.
+You'll need to provide your own client_secrets_device_oauth.json file.
 
 Examples:
-  waybar-calendar-notify auth                    # Authenticate with relay service
-  waybar-calendar-notify auth --device           # Authenticate with device flow
+  waybar-calendar-notify auth                    # Authenticate with device flow
   waybar-calendar-notify auth --status           # Check authentication status
   waybar-calendar-notify auth --revoke           # Clear local authentication`,
 	RunE: runAuth,
@@ -36,7 +33,6 @@ Examples:
 func init() {
 	authCmd.Flags().BoolVar(&revokeFlag, "revoke", false, "clear local authentication")
 	authCmd.Flags().BoolVar(&statusOnly, "status", false, "check authentication status only")
-	authCmd.Flags().BoolVar(&deviceFlow, "device", false, "use OAuth 2.0 device flow for CLI and limited-input devices")
 }
 
 func runAuth(cmd *cobra.Command, args []string) error {
@@ -46,19 +42,14 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		secretsPath = "client_secrets_device_oauth.json"
 	}
 
-	// Validate file exists for device flow
-	if deviceFlow {
-		if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
-			return fmt.Errorf("client secrets file not found: %s", secretsPath)
-		}
+	// Validate file exists
+	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
+		return fmt.Errorf("client secrets file not found: %s", secretsPath)
 	}
 
 	// Setup auth options
 	opts := &calendar.AuthOptions{
-		UseRelay:          !deviceFlow, // Disable relay when using device flow
-		UseDeviceFlow:     deviceFlow,
 		ClientSecretsPath: secretsPath,
-		// RelayURL will use the build-time injected value by default
 	}
 
 	// Initialize auth manager
@@ -94,13 +85,13 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Perform authentication via relay service
-	fmt.Printf("%s Starting authentication...\n", nerdfonts.InfoCircle)
-	fmt.Println("This will open your browser to complete Google Calendar authorization.")
+	// Perform authentication via device flow
+	fmt.Printf("%s Starting device authentication...\n", nerdfonts.InfoCircle)
+	fmt.Println("Follow the instructions to complete Google Calendar authorization.")
 	fmt.Println()
 
 	// Create a calendar client to trigger auth flow
-	_, err = calendar.NewClient(cacheDir, opts, verbose)
+	_, err = calendar.NewClient(cacheDir, opts, verbose, nil)
 	if err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
