@@ -76,7 +76,7 @@ func (of *OutputFormatter) generateStatusText(currentEvents, upcomingEvents []ca
 
 	// Show upcoming events count
 	if len(upcomingEvents) > 0 {
-		return fmt.Sprintf("%s %d", nerdfonts.Calendar, len(upcomingEvents))
+		return fmt.Sprintf("%s (%d)", nerdfonts.Calendar, len(upcomingEvents))
 	}
 
 	// Check if we have events later today
@@ -119,7 +119,6 @@ func (of *OutputFormatter) generateTooltip(allEvents []cache.CacheEntry, now tim
 	for _, event := range events {
 		eventLines := of.formatEventForTooltip(event, now)
 		lines = append(lines, eventLines...)
-		lines = append(lines, "")
 	}
 
 	// Add "more events" indicator if needed
@@ -172,6 +171,9 @@ func (of *OutputFormatter) formatEventForTooltip(event cache.CacheEntry, now tim
 		locationLine := fmt.Sprintf("   %s %s", nerdfonts.MapPin, event.Location)
 		lines = append(lines, locationLine)
 	}
+
+	// Add spacing between events
+	lines = append(lines, "")
 
 	return lines
 }
