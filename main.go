@@ -1,3 +1,5 @@
+// +scalingo install ./oauth-relay
+// +scalingo goVersion go1.24
 package main
 
 import (
