@@ -45,8 +45,8 @@ var defaultConfig = Config{
 		ShowDescription:  true,
 	},
 	Calendars: CalendarConfig{
-		PrimaryOnly: true,
-		CalendarIDs: []string{},
+		PrimaryOnly: false,  // Changed from true to false to enable multi-calendar support
+		CalendarIDs: []string{}, // Empty means auto-discover all calendars
 	},
 }
 
