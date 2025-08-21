@@ -4,7 +4,6 @@ credentials.json
 .env*
 
 # Build artifacts
-oauth-relay/oauth-relay
 waybar-calendar-notify
 bin/
 

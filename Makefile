@@ -2,15 +2,13 @@
 
 # Default values
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-RELAY_URL ?= https://gcal-oauth-relay.bnema.dev
 COMMIT_HASH ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Go variables
 BINARY_NAME = waybar-calendar-notify
 MAIN_PACKAGE = .
-LDFLAGS = -ldflags "-X github.com/bnema/waybar-calendar-notify/internal/calendar.RelayURL=$(RELAY_URL) \
-                   -X main.Version=$(VERSION) \
+LDFLAGS = -ldflags "-X main.Version=$(VERSION) \
                    -X main.CommitHash=$(COMMIT_HASH) \
                    -X main.BuildTime=$(BUILD_TIME)"
 
@@ -30,7 +28,6 @@ help: ## Show this help message
 
 build: ## Build production binary with injected values
 	@echo "Building $(BINARY_NAME) v$(VERSION) for production..."
-	@echo "Relay URL: $(RELAY_URL)"
 	@mkdir -p $(BUILD_DIR)
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
 
@@ -39,10 +36,10 @@ build-local: ## Build local development binary
 	@mkdir -p $(LOCAL_BIN)
 	go build $(LDFLAGS) -o $(LOCAL_BIN)/$(BINARY_NAME) $(MAIN_PACKAGE)
 
-dev-build: ## Build with development relay URL
-	@echo "Building for development with local relay..."
+dev-build: ## Build for development
+	@echo "Building for development..."
 	@mkdir -p $(LOCAL_BIN)
-	RELAY_URL=http://localhost:8080 $(MAKE) build-local
+	$(MAKE) build-local
 
 install: build ## Install binary to GOPATH/bin
 	@echo "Installing $(BINARY_NAME) to GOPATH/bin..."
@@ -103,7 +100,6 @@ version: ## Show version information
 	@echo "Version: $(VERSION)"
 	@echo "Commit: $(COMMIT_HASH)"
 	@echo "Build Time: $(BUILD_TIME)"
-	@echo "Relay URL: $(RELAY_URL)"
 
 # Release helpers
 release: clean test lint build ## Full release build (clean, test, lint, build)
