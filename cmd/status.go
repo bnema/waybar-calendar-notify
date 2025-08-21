@@ -28,7 +28,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("=== Calendar Status ===")
 
 	// Check authentication
-	client, err := calendar.NewClient(cacheDir, nil, verbose)
+	client, err := calendar.NewClient(cacheDir, nil, verbose, &cfg.Calendars)
 	if err != nil {
 		fmt.Printf("%s Authentication: Failed to initialize (%v)\n", nerdfonts.ExclamationTriangle, err)
 	} else if client.HasValidToken() {
@@ -103,7 +103,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		fmt.Printf("%s %s %s - %s\n", symbol, event.GetTimeString(), event.Summary, status)
 		
 		if event.Location != "" {
-			fmt.Printf("     %s %s\n", nerdfonts.MapPin, event.Location)
+			fmt.Printf("%s %s\n", nerdfonts.MapPin, event.Location)
 		}
 
 		// Show notification status

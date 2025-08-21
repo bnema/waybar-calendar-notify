@@ -59,8 +59,8 @@ func runSync(cmd *cobra.Command, args []string) error {
 		logger.Warn("failed to load cache", "error", err)
 	}
 
-	// Initialize calendar client
-	client, err := calendar.NewClient(cacheDir, nil, verbose)
+	// Initialize calendar client with config
+	client, err := calendar.NewClient(cacheDir, nil, verbose, &cfg.Calendars)
 	if err != nil {
 		return fmt.Errorf("failed to initialize calendar client: %w", err)
 	}
@@ -70,15 +70,20 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("authentication required. Run 'waybar-calendar-notify auth' first")
 	}
 
+	// Add logging before fetching
+	logger.Info("starting calendar sync", "cache_dir", cacheDir, "primary_only", cfg.Calendars.PrimaryOnly)
+
 	// Fetch today's events
 	events, err := client.GetTodaysEvents()
 	if err != nil {
+		logger.Error("failed to fetch calendar events", "error", err)
 		// If we have cached events, use them and warn about API failure
 		if !eventCache.HasEvents() {
 			return fmt.Errorf("failed to fetch calendar events: %w", err)
 		}
 		logger.Warn("failed to fetch events, using cached data", "error", err)
 	} else {
+		logger.Info("successfully fetched events", "event_count", len(events))
 		// Update cache with new events
 		if cacheEvents {
 			newEvents := eventCache.UpdateEvents(events)
