@@ -1,0 +1,34 @@
+# OAuth credentials - never commit these
+client_secrets.json
+credentials.json
+.env*
+
+# Build artifacts
+oauth-relay/oauth-relay
+waybar-calendar-notify
+
+# Cache and temporary files
+.cache/
+*.log
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Go specific
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work.sum
+
+docs.local/
