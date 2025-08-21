@@ -8,10 +8,12 @@ import (
 
 	gcal "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
+	"github.com/bnema/waybar-calendar-notify/internal/logger"
 )
 
 type Event struct {
 	ID          string
+	CalendarID  string    // Calendar ID this event belongs to
 	Summary     string
 	Description string
 	StartTime   time.Time
@@ -52,6 +54,16 @@ func NewCalendarService(authManager *AuthManager) (*CalendarService, error) {
 	}, nil
 }
 
+// ListCalendars retrieves all calendars accessible by the authenticated user
+func (c *CalendarService) ListCalendars() ([]*gcal.CalendarListEntry, error) {
+	ctx := context.Background()
+	calendarList, err := c.service.CalendarList.List().Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve calendar list: %w", err)
+	}
+	return calendarList.Items, nil
+}
+
 func (c *CalendarService) GetTodaysEvents() ([]Event, error) {
 	ctx := context.Background()
 
@@ -72,28 +84,48 @@ func (c *CalendarService) GetUpcomingEvents(hours int) ([]Event, error) {
 }
 
 func (c *CalendarService) GetEventsInRange(ctx context.Context, timeMin, timeMax time.Time) ([]Event, error) {
-	// List events from the primary calendar
-	events, err := c.service.Events.List("primary").
-		TimeMin(timeMin.Format(time.RFC3339)).
-		TimeMax(timeMax.Format(time.RFC3339)).
-		SingleEvents(true).
-		OrderBy("startTime").
-		Context(ctx).
-		Do()
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve calendar events: %w", err)
-	}
+	return c.GetEventsInRangeForCalendars(ctx, timeMin, timeMax, nil)
+}
 
-	var result []Event
-	for _, item := range events.Items {
-		event, err := c.convertToEvent(item)
+// GetEventsInRangeForCalendars retrieves events from specified calendars within a time range
+func (c *CalendarService) GetEventsInRangeForCalendars(ctx context.Context, timeMin, timeMax time.Time, calendarIDs []string) ([]Event, error) {
+	// If no calendar IDs specified, use primary only
+	if len(calendarIDs) == 0 {
+		calendarIDs = []string{"primary"}
+	}
+	
+	var allEvents []Event
+	for _, calID := range calendarIDs {
+		logger.Debug("fetching events from calendar", "calendar_id", calID, "time_min", timeMin, "time_max", timeMax)
+		
+		events, err := c.service.Events.List(calID).
+			TimeMin(timeMin.Format(time.RFC3339)).
+			TimeMax(timeMax.Format(time.RFC3339)).
+			SingleEvents(true).
+			OrderBy("startTime").
+			Context(ctx).
+			Do()
+		
 		if err != nil {
-			continue // Skip invalid events
+			logger.Warn("failed to fetch events from calendar", "calendar_id", calID, "error", err)
+			continue // Skip this calendar but continue with others
 		}
-		result = append(result, event)
+		
+		logger.Info("fetched events from calendar", "calendar_id", calID, "event_count", len(events.Items))
+		
+		for _, item := range events.Items {
+			event, err := c.convertToEvent(item)
+			if err != nil {
+				logger.Debug("skipping invalid event", "event_id", item.Id, "error", err)
+				continue
+			}
+			event.CalendarID = calID // Add calendar ID to event
+			allEvents = append(allEvents, event)
+		}
 	}
-
-	return result, nil
+	
+	logger.Info("total events fetched", "total_count", len(allEvents), "calendar_count", len(calendarIDs))
+	return allEvents, nil
 }
 
 func (c *CalendarService) GetCurrentEvents() ([]Event, error) {

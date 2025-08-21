@@ -1,32 +1,24 @@
 package calendar
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/bnema/waybar-calendar-notify/internal/config"
 	"github.com/bnema/waybar-calendar-notify/internal/security"
 )
 
 type AuthOptions struct {
-	UseRelay          bool   // Use relay service for authentication
-	UseDeviceFlow     bool   // Use OAuth 2.0 device flow
 	ClientSecretsPath string // Path to client secrets JSON file (for device flow)
-	RelayURL          string // Optional override, defaults to production URL
 }
 
 // Validate validates the AuthOptions configuration
@@ -35,39 +27,23 @@ func (opts *AuthOptions) Validate() error {
 		return fmt.Errorf("auth options cannot be nil")
 	}
 
-	if opts.UseDeviceFlow && opts.UseRelay {
-		return fmt.Errorf("cannot use both device flow and relay authentication")
-	}
-
-	if opts.UseDeviceFlow && opts.ClientSecretsPath == "" {
+	if opts.ClientSecretsPath == "" {
 		return fmt.Errorf("client secrets path is required for device flow authentication")
-	}
-
-	if opts.RelayURL != "" {
-		if _, err := url.Parse(opts.RelayURL); err != nil {
-			return fmt.Errorf("invalid relay URL: %w", err)
-		}
 	}
 
 	return nil
 }
 
 type AuthManager struct {
-	tokenPath    string
-	cacheDir     string
-	relayURL     string
-	httpClient   *security.SecureHTTPClient
-	encryptor    *security.TokenEncryptor
-	logger       *security.SecureLogger
-	config       *config.SecureConfig
-	csrfToken    string
-	sessionID    string
-	opts         *AuthOptions
-	verbose      bool
+	tokenPath  string
+	cacheDir   string
+	httpClient *security.SecureHTTPClient
+	encryptor  *security.TokenEncryptor
+	logger     *security.SecureLogger
+	opts       *AuthOptions
+	verbose    bool
 }
 
-// Build-time injected relay URL
-var RelayURL = "https://gcal-oauth-relay.bnema.dev" // Default, can be overridden with -ldflags
 
 func NewAuthManager(cacheDir string, opts *AuthOptions, verbose bool) (*AuthManager, error) {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
@@ -77,68 +53,13 @@ func NewAuthManager(cacheDir string, opts *AuthOptions, verbose bool) (*AuthMana
 	// Set default options if none provided
 	if opts == nil {
 		opts = &AuthOptions{
-			UseRelay: true,
+			ClientSecretsPath: "client_secrets_device_oauth.json",
 		}
 	}
 
 	// Validate options
 	if err := opts.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid auth options: %w", err)
-	}
-
-	// For device flow, we don't need the secure config and HTTP client setup
-	if opts.UseDeviceFlow {
-		// Initialize token encryptor
-		encryptor, err := security.NewTokenEncryptor(cacheDir)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize token encryption: %w", err)
-		}
-
-		// Initialize secure logger
-		logger := security.NewSecureLogger(verbose)
-
-		authManager := &AuthManager{
-			tokenPath: filepath.Join(cacheDir, "token.enc"),
-			cacheDir:  cacheDir,
-			encryptor: encryptor,
-			logger:    logger,
-			opts:      opts,
-			verbose:   verbose,
-		}
-
-		// Log initialization for device flow
-		logger.LogSecurityEvent("auth_manager_initialized", security.SeverityInfo, map[string]any{
-			"cache_dir":      cacheDir,
-			"auth_method":    "device_flow",
-			"client_secrets": security.RedactString(opts.ClientSecretsPath),
-		})
-
-		return authManager, nil
-	}
-
-	// Relay flow setup (existing logic)
-	// Load secure configuration
-	secureConfig, err := config.LoadSecureConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load secure config: %w", err)
-	}
-
-	// Override relay URL if provided in options
-	relayURL := RelayURL
-	if opts.RelayURL != "" {
-		relayURL = opts.RelayURL
-		secureConfig.RelayURL = relayURL
-		
-		// Revalidate config with new URL
-		if err := secureConfig.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid relay URL: %w", err)
-		}
-	}
-
-	// Initialize secure HTTP client
-	httpClient, err := security.NewSecureHTTPClient(relayURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create secure HTTP client: %w", err)
 	}
 
 	// Initialize token encryptor
@@ -150,24 +71,27 @@ func NewAuthManager(cacheDir string, opts *AuthOptions, verbose bool) (*AuthMana
 	// Initialize secure logger
 	logger := security.NewSecureLogger(verbose)
 
+	// Create a basic secure HTTP client for device flow (used for token refresh)
+	httpClient, err := security.NewSecureHTTPClient("https://oauth2.googleapis.com")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secure HTTP client for device flow: %w", err)
+	}
+
 	authManager := &AuthManager{
-		tokenPath:  filepath.Join(cacheDir, "token.enc"), // .enc extension for encrypted tokens
+		tokenPath:  filepath.Join(cacheDir, "token.enc"),
 		cacheDir:   cacheDir,
-		relayURL:   relayURL,
 		httpClient: httpClient,
 		encryptor:  encryptor,
 		logger:     logger,
-		config:     secureConfig,
 		opts:       opts,
 		verbose:    verbose,
 	}
 
-	// Log initialization
+	// Log initialization for device flow
 	logger.LogSecurityEvent("auth_manager_initialized", security.SeverityInfo, map[string]any{
-		"cache_dir":         cacheDir,
-		"relay_url":         security.RedactString(relayURL),
-		"token_encryption":  secureConfig.TokenEncryption,
-		"cert_pinning":      secureConfig.EnableCertPinning,
+		"cache_dir":      cacheDir,
+		"auth_method":    "device_flow",
+		"client_secrets": security.RedactString(opts.ClientSecretsPath),
 	})
 
 	return authManager, nil
@@ -182,12 +106,8 @@ func (a *AuthManager) GetClient(ctx context.Context) (*http.Client, error) {
 			"error": err.Error(),
 		})
 		
-		// No token, need full auth
-		if a.opts.UseDeviceFlow {
-			token, err = a.authenticateViaDevice(ctx)
-		} else {
-			token, err = a.authenticateViaRelay(ctx)
-		}
+		// No token, need full auth via device flow
+		token, err = a.authenticateViaDevice(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -206,12 +126,8 @@ func (a *AuthManager) GetClient(ctx context.Context) (*http.Client, error) {
 				"error": err.Error(),
 			})
 			
-			// Refresh failed, need full re-auth
-			if a.opts.UseDeviceFlow {
-				token, err = a.authenticateViaDevice(ctx)
-			} else {
-				token, err = a.authenticateViaRelay(ctx)
-			}
+			// Refresh failed, need full re-auth via device flow
+			token, err = a.authenticateViaDevice(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -243,101 +159,6 @@ func (a *AuthManager) GetClient(ctx context.Context) (*http.Client, error) {
 	return config.Client(ctx, token), nil
 }
 
-func (a *AuthManager) authenticateViaRelay(ctx context.Context) (*oauth2.Token, error) {
-	a.logger.LogAuthEvent("relay_auth_start", true, map[string]any{
-		"relay_url": security.RedactString(a.relayURL),
-	})
-
-	// Generate CSRF token for this session
-	csrfBytes := make([]byte, 32)
-	if _, err := rand.Read(csrfBytes); err != nil {
-		return nil, security.NewCryptoError("csrf_generation", "failed to generate CSRF token").WithCause(err)
-	}
-	a.csrfToken = base64.URLEncoding.EncodeToString(csrfBytes)
-
-	// Step 1: Initialize session with CSRF protection
-	initURL := fmt.Sprintf("%s/auth/init", a.relayURL)
-	req, err := http.NewRequestWithContext(ctx, "GET", initURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create init request: %w", err)
-	}
-
-	// Add security headers
-	for key, value := range a.config.GetSecurityHeaders() {
-		req.Header.Set(key, value)
-	}
-	req.Header.Set("X-CSRF-Token", a.csrfToken)
-
-	startTime := time.Now()
-	resp, err := a.httpClient.Do(req)
-	duration := time.Since(startTime)
-
-	a.logger.LogNetworkEvent("GET", initURL, 0, duration.String())
-
-	if err != nil {
-		relayErr := security.NewRelayError("init", "failed to connect to relay service", 0, security.SeverityCritical).WithCause(err)
-		a.logger.LogSecurityEvent("relay_connection_failed", security.SeverityCritical, map[string]any{
-			"error": err.Error(),
-			"url":   security.RedactString(initURL),
-		})
-		return nil, relayErr
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			a.logger.Warn("Failed to close response body", "error", closeErr)
-		}
-	}()
-
-	a.logger.LogNetworkEvent("GET", initURL, resp.StatusCode, duration.String())
-
-	if resp.StatusCode != http.StatusOK {
-		relayErr := security.NewRelayError("init", "relay service unavailable", resp.StatusCode, security.SeverityWarning)
-		a.logger.LogSecurityEvent("relay_init_failed", security.SeverityWarning, map[string]any{
-			"status_code": resp.StatusCode,
-		})
-		return nil, relayErr
-	}
-
-	// Validate and parse response
-	var initResp struct {
-		SessionID string `json:"session_id"`
-		AuthURL   string `json:"auth_url"`
-		CSRFToken string `json:"csrf_token"`
-	}
-
-	body := io.LimitReader(resp.Body, 1024*1024) // 1MB limit
-	if err := json.NewDecoder(body).Decode(&initResp); err != nil {
-		return nil, fmt.Errorf("invalid relay response: %w", err)
-	}
-
-	// Validate response fields
-	if len(initResp.SessionID) < 16 || len(initResp.CSRFToken) < 16 {
-		return nil, security.NewValidationError("session_data", "", "invalid security tokens from relay")
-	}
-
-	// Verify CSRF token matches (optional - some relays may not echo it back)
-	if initResp.CSRFToken != "" && initResp.CSRFToken != a.csrfToken {
-		return nil, security.NewValidationError("csrf_token", "", "CSRF token mismatch")
-	}
-
-	a.sessionID = initResp.SessionID
-
-	// Step 2: Open browser
-	fmt.Printf("Opening browser for authentication...\n")
-	fmt.Printf("If browser doesn't open, visit: %s\n\n", initResp.AuthURL)
-
-	// Try to open browser (ignore errors)
-	if err := exec.Command("xdg-open", initResp.AuthURL).Run(); err != nil {
-		a.logger.Warn("Failed to open browser automatically", "error", err, "url", initResp.AuthURL)
-	}
-
-	a.logger.LogAuthEvent("browser_opened", true, map[string]any{
-		"session_id": initResp.SessionID[:8] + "...", // Log partial session ID
-	})
-
-	// Step 3: Poll for completion with secure implementation
-	return a.pollForToken(ctx)
-}
 
 func (a *AuthManager) authenticateViaDevice(ctx context.Context) (*oauth2.Token, error) {
 	a.logger.LogAuthEvent("device_auth_start", true, map[string]any{
@@ -369,128 +190,7 @@ func (a *AuthManager) authenticateViaDevice(ctx context.Context) (*oauth2.Token,
 	return token, nil
 }
 
-func (a *AuthManager) pollForToken(ctx context.Context) (*oauth2.Token, error) {
-	pollCtx, cancel := context.WithTimeout(ctx, a.config.RequestTimeout*10) // Extended timeout for user interaction
-	defer cancel()
 
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	pollURL := fmt.Sprintf("%s/auth/poll/%s", a.relayURL, a.sessionID)
-	pollCount := 0
-	maxPolls := 150 // 5 minutes at 2-second intervals
-
-	a.logger.LogAuthEvent("polling_start", true, map[string]any{
-		"poll_url": security.RedactString(pollURL),
-		"timeout":  func() string {
-			if deadline, ok := pollCtx.Deadline(); ok {
-				return deadline.Format(time.RFC3339)
-			}
-			return "no deadline"
-		}(),
-	})
-
-	for {
-		select {
-		case <-pollCtx.Done():
-			a.logger.LogAuthEvent("polling_timeout", false, map[string]any{
-				"poll_count": pollCount,
-			})
-			return nil, fmt.Errorf("authentication timeout: %w", pollCtx.Err())
-
-		case <-ticker.C:
-			pollCount++
-			if pollCount > maxPolls {
-				return nil, fmt.Errorf("maximum polling attempts exceeded")
-			}
-
-			req, err := http.NewRequestWithContext(pollCtx, "GET", pollURL, nil)
-			if err != nil {
-				continue // Retry on request creation errors
-			}
-
-			// Add security headers
-			for key, value := range a.config.GetSecurityHeaders() {
-				req.Header.Set(key, value)
-			}
-			req.Header.Set("X-CSRF-Token", a.csrfToken)
-
-			startTime := time.Now()
-			resp, err := a.httpClient.Do(req)
-			duration := time.Since(startTime)
-
-			if err != nil {
-				a.logger.LogNetworkEvent("GET", pollURL, 0, duration.String())
-				continue // Retry on network errors
-			}
-
-			token, done, pollErr := a.processPollResponse(resp, duration)
-			if closeErr := resp.Body.Close(); closeErr != nil {
-				a.logger.Warn("Failed to close response body", "error", closeErr)
-			}
-
-			if pollErr != nil {
-				a.logger.LogAuthEvent("poll_error", false, map[string]any{
-					"error":      pollErr.Error(),
-					"poll_count": pollCount,
-				})
-				continue // Retry on processing errors
-			}
-
-			if done {
-				if token != nil {
-					a.logger.LogAuthEvent("polling_success", true, map[string]any{
-						"poll_count": pollCount,
-						"duration":   time.Since(time.Now().Add(-time.Duration(pollCount)*2*time.Second)).String(),
-					})
-					return token, nil
-				}
-				a.logger.LogAuthEvent("polling_failed", false, map[string]any{
-					"poll_count": pollCount,
-				})
-				return nil, fmt.Errorf("authentication failed")
-			}
-		}
-	}
-}
-
-func (a *AuthManager) processPollResponse(resp *http.Response, duration time.Duration) (*oauth2.Token, bool, error) {
-	a.logger.LogNetworkEvent("GET", "poll", resp.StatusCode, duration.String())
-
-	switch resp.StatusCode {
-	case http.StatusAccepted:
-		return nil, false, nil // Still pending, continue polling
-
-	case http.StatusOK:
-		var tokens struct {
-			AccessToken  string `json:"access_token"`
-			RefreshToken string `json:"refresh_token"`
-			ExpiresIn    int    `json:"expires_in"`
-		}
-
-		body := io.LimitReader(resp.Body, 1024*1024) // 1MB limit
-		if err := json.NewDecoder(body).Decode(&tokens); err != nil {
-			return nil, true, fmt.Errorf("invalid token response: %w", err)
-		}
-
-		// Validate token format
-		if len(tokens.AccessToken) < 10 || tokens.ExpiresIn <= 0 {
-			return nil, true, security.NewValidationError("token_data", "", "invalid token format")
-		}
-
-		token := &oauth2.Token{
-			AccessToken:  tokens.AccessToken,
-			RefreshToken: tokens.RefreshToken,
-			TokenType:    "Bearer",
-			Expiry:       time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second),
-		}
-
-		return token, true, nil
-
-	default:
-		return nil, true, security.NewRelayError("poll", "authentication failed", resp.StatusCode, security.SeverityWarning)
-	}
-}
 
 func (a *AuthManager) loadToken() (*oauth2.Token, error) {
 	encrypted, err := os.ReadFile(a.tokenPath)
@@ -514,11 +214,6 @@ func (a *AuthManager) loadToken() (*oauth2.Token, error) {
 	}
 
 	a.logger.LogCryptoEvent("token_decrypt", true, "")
-
-	// Validate token age (only if config is available)
-	if a.config != nil && time.Since(token.Expiry) > a.config.MaxTokenAge {
-		return nil, security.NewTokenError("validation", "token too old")
-	}
 
 	return &token, nil
 }
@@ -558,30 +253,51 @@ func (a *AuthManager) RefreshToken(ctx context.Context) error {
 		return security.NewTokenError("refresh", "no token to refresh").WithCause(err)
 	}
 
-	// Prepare refresh request
-	reqBody, _ := json.Marshal(map[string]string{
-		"refresh_token": token.RefreshToken,
+	if token.RefreshToken == "" {
+		return security.NewTokenError("refresh", "no refresh token available")
+	}
+
+	// Use device flow refresh
+	return a.refreshTokenForDeviceFlow(ctx, token)
+}
+
+func (a *AuthManager) refreshTokenForDeviceFlow(ctx context.Context, token *oauth2.Token) error {
+	a.logger.LogAuthEvent("device_token_refresh_start", true, map[string]any{
+		"has_refresh_token": token.RefreshToken != "",
 	})
 
-	refreshURL := fmt.Sprintf("%s/auth/refresh", a.relayURL)
-	req, err := http.NewRequestWithContext(ctx, "POST", refreshURL, bytes.NewReader(reqBody))
+	// Load client secrets for device flow
+	secrets, err := LoadClientSecrets(a.opts.ClientSecretsPath)
+	if err != nil {
+		return fmt.Errorf("failed to load client secrets for token refresh: %w", err)
+	}
+
+	// Create refresh request to Google's token endpoint
+	params := url.Values{
+		"client_id":     {secrets.Installed.ClientID},
+		"client_secret": {secrets.Installed.ClientSecret},
+		"refresh_token": {token.RefreshToken},
+		"grant_type":    {"refresh_token"},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://oauth2.googleapis.com/token", strings.NewReader(params.Encode()))
 	if err != nil {
 		return fmt.Errorf("failed to create refresh request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	for key, value := range a.config.GetSecurityHeaders() {
-		req.Header.Set(key, value)
-	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	startTime := time.Now()
 	resp, err := a.httpClient.Do(req)
 	duration := time.Since(startTime)
 
-	a.logger.LogNetworkEvent("POST", refreshURL, 0, duration.String())
+	a.logger.LogNetworkEvent("POST", "https://oauth2.googleapis.com/token", 0, duration.String())
 
 	if err != nil {
-		return security.NewRelayError("refresh", "refresh request failed", 0, security.SeverityWarning).WithCause(err)
+		a.logger.LogAuthEvent("device_token_refresh_failed", false, map[string]any{
+			"error": err.Error(),
+		})
+		return fmt.Errorf("token refresh request failed: %w", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -589,32 +305,55 @@ func (a *AuthManager) RefreshToken(ctx context.Context) error {
 		}
 	}()
 
-	a.logger.LogNetworkEvent("POST", refreshURL, resp.StatusCode, duration.String())
+	a.logger.LogNetworkEvent("POST", "https://oauth2.googleapis.com/token", resp.StatusCode, duration.String())
 
 	if resp.StatusCode != http.StatusOK {
-		return security.NewRelayError("refresh", "refresh failed", resp.StatusCode, security.SeverityWarning)
+		var errResp struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+		}
+		
+		if decodeErr := json.NewDecoder(resp.Body).Decode(&errResp); decodeErr == nil {
+			a.logger.LogAuthEvent("device_token_refresh_failed", false, map[string]any{
+				"error":             errResp.Error,
+				"error_description": errResp.ErrorDescription,
+			})
+			return fmt.Errorf("token refresh failed: %s - %s", errResp.Error, errResp.ErrorDescription)
+		}
+		return fmt.Errorf("token refresh failed with status %d", resp.StatusCode)
 	}
 
-	var newTokens struct {
+	var tokenResp struct {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
 		ExpiresIn    int    `json:"expires_in"`
+		TokenType    string `json:"token_type"`
 	}
 
-	body := io.LimitReader(resp.Body, 1024*1024) // 1MB limit
-	if err := json.NewDecoder(body).Decode(&newTokens); err != nil {
-		return fmt.Errorf("invalid refresh response: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return fmt.Errorf("failed to decode refresh token response: %w", err)
 	}
 
-	// Update stored token
-	token.AccessToken = newTokens.AccessToken
-	if newTokens.RefreshToken != "" {
-		token.RefreshToken = newTokens.RefreshToken
+	// Validate response
+	if tokenResp.AccessToken == "" || tokenResp.ExpiresIn <= 0 {
+		return fmt.Errorf("invalid token refresh response: missing required fields")
 	}
-	token.Expiry = time.Now().Add(time.Duration(newTokens.ExpiresIn) * time.Second)
+
+	// Update token
+	token.AccessToken = tokenResp.AccessToken
+	if tokenResp.RefreshToken != "" {
+		token.RefreshToken = tokenResp.RefreshToken
+	}
+	token.Expiry = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+	token.TokenType = tokenResp.TokenType
+
+	a.logger.LogAuthEvent("device_token_refresh_success", true, map[string]any{
+		"new_expiry": token.Expiry.Format(time.RFC3339),
+	})
 
 	return a.saveToken(token)
 }
+
 
 func (a *AuthManager) ClearLocalToken() error {
 	if err := os.Remove(a.tokenPath); err != nil && !os.IsNotExist(err) {
@@ -649,8 +388,7 @@ func (a *AuthManager) Close() error {
 		a.httpClient.Close()
 	}
 	
-	// Clear sensitive configuration data
-	a.config = nil
+	// Config is managed separately - no need to clear
 	
 	// Clear encryptor (which may contain sensitive keys)
 	a.encryptor = nil

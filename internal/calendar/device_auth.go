@@ -79,7 +79,7 @@ func NewDeviceAuthManager(cacheDir, clientSecretsPath string, verbose bool) (*De
 	}
 
 	// Load client secrets
-	secrets, err := loadClientSecrets(clientSecretsPath)
+	secrets, err := LoadClientSecrets(clientSecretsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load client secrets: %w", err)
 	}
@@ -371,7 +371,7 @@ func (d *DeviceAuthManager) GetOAuth2Client(ctx context.Context, token *oauth2.T
 }
 
 // loadClientSecrets loads and validates the OAuth client secrets from the JSON file
-func loadClientSecrets(path string) (*ClientSecrets, error) {
+func LoadClientSecrets(path string) (*ClientSecrets, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read client secrets file '%s': %w", path, err)
