@@ -5,7 +5,14 @@ credentials.json
 
 # Build artifacts
 waybar-calendar-notify
+waybar-calendar-notify-obfuscated
+waybar-calendar-notify-obfuscated.original
 bin/
+.garble-seed
+.build-timestamp
+internal/calendar/embedded_secrets.go
+internal/calendar/security_runtime.go
+internal/calendar/embedded_secrets_data.go
 
 # Cache and temporary files
 .cache/
