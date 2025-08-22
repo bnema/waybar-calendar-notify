@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -10,6 +9,7 @@ import (
 	"github.com/bnema/waybar-calendar-notify/internal/cache"
 	"github.com/bnema/waybar-calendar-notify/internal/calendar"
 	"github.com/bnema/waybar-calendar-notify/internal/config"
+	"github.com/bnema/waybar-calendar-notify/internal/logger"
 	"github.com/bnema/waybar-calendar-notify/internal/notifier"
 	"github.com/bnema/waybar-calendar-notify/internal/waybar"
 )
@@ -56,13 +56,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 	// Initialize cache
 	eventCache := cache.New(cacheDir)
 	if err := eventCache.Load(); err != nil {
-		if verbose {
-			log.Printf("Warning: failed to load cache: %v", err)
-		}
+		logger.Warn("failed to load cache", "error", err)
 	}
 
 	// Initialize calendar client
-	client, err := calendar.NewClient(cacheDir, nil)
+	client, err := calendar.NewClient(cacheDir, nil, verbose)
 	if err != nil {
 		return fmt.Errorf("failed to initialize calendar client: %w", err)
 	}
@@ -79,19 +77,17 @@ func runSync(cmd *cobra.Command, args []string) error {
 		if !eventCache.HasEvents() {
 			return fmt.Errorf("failed to fetch calendar events: %w", err)
 		}
-		if verbose {
-			log.Printf("Warning: failed to fetch events, using cached data: %v", err)
-		}
+		logger.Warn("failed to fetch events, using cached data", "error", err)
 	} else {
 		// Update cache with new events
 		if cacheEvents {
 			newEvents := eventCache.UpdateEvents(events)
-			if verbose && len(newEvents) > 0 {
-				log.Printf("Found %d new events", len(newEvents))
+			if len(newEvents) > 0 {
+				logger.Info("found new events", "count", len(newEvents))
 			}
 
 			if err := eventCache.Save(); err != nil {
-				log.Printf("Warning: failed to save cache: %v", err)
+				logger.Warn("failed to save cache", "error", err)
 			}
 		}
 	}
@@ -100,7 +96,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	notificationEnabled := notifyUpcoming || notifyFlag || cfg.Notifications.Enabled
 	if notificationEnabled {
 		if err := sendNotifications(eventCache, cfg); err != nil {
-			log.Printf("Warning: failed to send notifications: %v", err)
+			logger.Warn("failed to send notifications", "error", err)
 		}
 	}
 
