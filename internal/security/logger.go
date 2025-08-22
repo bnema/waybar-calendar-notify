@@ -9,8 +9,29 @@ import (
 )
 
 // SecureLogger provides structured logging with automatic redaction of sensitive data
+
+// silentHandler discards all log messages when verbose mode is disabled
+type silentHandler struct{}
+
+func (h *silentHandler) Enabled(_ context.Context, _ slog.Level) bool {
+	return false
+}
+
+func (h *silentHandler) Handle(_ context.Context, _ slog.Record) error {
+	return nil
+}
+
+func (h *silentHandler) WithAttrs(_ []slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *silentHandler) WithGroup(_ string) slog.Handler {
+	return h
+}
+
 type SecureLogger struct {
-	logger *slog.Logger
+	logger  *slog.Logger
+	verbose bool
 }
 
 // Sensitive data patterns that should be redacted from logs
@@ -36,39 +57,55 @@ var sensitivePatterns = []*regexp.Regexp{
 }
 
 // NewSecureLogger creates a new secure logger with redaction capabilities
-func NewSecureLogger() *SecureLogger {
-	opts := &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Apply redaction to string values
-			if a.Value.Kind() == slog.KindString {
-				a.Value = slog.StringValue(redactSensitiveData(a.Value.String()))
-			}
-			return a
-		},
+func NewSecureLogger(verbose bool) *SecureLogger {
+	var handler slog.Handler
+	
+	if verbose {
+		opts := &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				// Apply redaction to string values
+				if a.Value.Kind() == slog.KindString {
+					a.Value = slog.StringValue(redactSensitiveData(a.Value.String()))
+				}
+				return a
+			},
+		}
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		// Silent handler for non-verbose mode
+		handler = &silentHandler{}
 	}
 
-	handler := slog.NewJSONHandler(os.Stderr, opts)
 	return &SecureLogger{
-		logger: slog.New(handler),
+		logger:  slog.New(handler),
+		verbose: verbose,
 	}
 }
 
 // NewSecureLoggerWithLevel creates a secure logger with specified log level
-func NewSecureLoggerWithLevel(level slog.Level) *SecureLogger {
-	opts := &slog.HandlerOptions{
-		Level: level,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Value.Kind() == slog.KindString {
-				a.Value = slog.StringValue(redactSensitiveData(a.Value.String()))
-			}
-			return a
-		},
+func NewSecureLoggerWithLevel(level slog.Level, verbose bool) *SecureLogger {
+	var handler slog.Handler
+	
+	if verbose {
+		opts := &slog.HandlerOptions{
+			Level: level,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				if a.Value.Kind() == slog.KindString {
+					a.Value = slog.StringValue(redactSensitiveData(a.Value.String()))
+				}
+				return a
+			},
+		}
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		// Silent handler for non-verbose mode
+		handler = &silentHandler{}
 	}
 
-	handler := slog.NewJSONHandler(os.Stderr, opts)
 	return &SecureLogger{
-		logger: slog.New(handler),
+		logger:  slog.New(handler),
+		verbose: verbose,
 	}
 }
 
