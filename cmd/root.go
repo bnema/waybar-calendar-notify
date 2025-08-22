@@ -15,6 +15,11 @@ var (
 	verbose  bool
 	cfgFile  string
 	cfg      *config.Config
+	
+	// Version information
+	version    string
+	commitHash string
+	buildTime  string
 )
 
 var rootCmd = &cobra.Command{
@@ -27,11 +32,20 @@ waybar-calendar-notify fetches your Google Calendar events, displays them in Way
 with a rich tooltip, and sends desktop notifications for upcoming meetings and appointments.
 
 Perfect for running as a systemd service to get real-time calendar updates and notifications.`,
-	Version: "1.0.0",
 }
 
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+// SetVersionInfo sets the version information for the CLI
+func SetVersionInfo(v, commit, buildTime string) {
+	version = v
+	commitHash = commit
+	buildTime = buildTime
+	
+	// Set version on root command
+	rootCmd.Version = fmt.Sprintf("%s (commit: %s, built: %s)", version, commitHash, buildTime)
 }
 
 func init() {
