@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -12,18 +13,21 @@ import (
 var (
 	revokeFlag bool
 	statusOnly bool
+	deviceFlow bool
 )
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage Google Calendar authentication",
-	Long: `Authenticate with Google Calendar API using the OAuth relay service.
+	Long: `Authenticate with Google Calendar API using either OAuth relay service or device flow.
 
-This command provides seamless authentication without requiring any setup or
-credential management. Authentication is handled through our secure relay service.
+This command provides two authentication methods:
+1. Relay service (default): Seamless authentication without credential management
+2. Device flow (--device): For CLI applications and limited-input devices using device codes
 
 Examples:
-  waybar-calendar-notify auth                    # Authenticate with Google Calendar
+  waybar-calendar-notify auth                    # Authenticate with relay service
+  waybar-calendar-notify auth --device           # Authenticate with device flow
   waybar-calendar-notify auth --status           # Check authentication status
   waybar-calendar-notify auth --revoke           # Clear local authentication`,
 	RunE: runAuth,
@@ -32,17 +36,33 @@ Examples:
 func init() {
 	authCmd.Flags().BoolVar(&revokeFlag, "revoke", false, "clear local authentication")
 	authCmd.Flags().BoolVar(&statusOnly, "status", false, "check authentication status only")
+	authCmd.Flags().BoolVar(&deviceFlow, "device", false, "use OAuth 2.0 device flow for CLI and limited-input devices")
 }
 
 func runAuth(cmd *cobra.Command, args []string) error {
-	// Setup auth options for relay service (uses build-time injected URL)
+	// Configure client secrets path
+	secretsPath := clientSecretsPath
+	if secretsPath == "" {
+		secretsPath = "client_secrets_device_oauth.json"
+	}
+
+	// Validate file exists for device flow
+	if deviceFlow {
+		if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
+			return fmt.Errorf("client secrets file not found: %s", secretsPath)
+		}
+	}
+
+	// Setup auth options
 	opts := &calendar.AuthOptions{
-		UseRelay: true,
+		UseRelay:          !deviceFlow, // Disable relay when using device flow
+		UseDeviceFlow:     deviceFlow,
+		ClientSecretsPath: secretsPath,
 		// RelayURL will use the build-time injected value by default
 	}
 
 	// Initialize auth manager
-	authManager, err := calendar.NewAuthManager(cacheDir, opts)
+	authManager, err := calendar.NewAuthManager(cacheDir, opts, verbose)
 	if err != nil {
 		return fmt.Errorf("failed to initialize auth manager: %w", err)
 	}
@@ -80,7 +100,7 @@ func runAuth(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Create a calendar client to trigger auth flow
-	_, err = calendar.NewClient(cacheDir, opts)
+	_, err = calendar.NewClient(cacheDir, opts, verbose)
 	if err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
