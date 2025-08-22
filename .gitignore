@@ -1,11 +1,12 @@
 # OAuth credentials - never commit these
-client_secrets.json
+client_secrets*.json
 credentials.json
 .env*
 
 # Build artifacts
 oauth-relay/oauth-relay
 waybar-calendar-notify
+bin/
 
 # Cache and temporary files
 .cache/
