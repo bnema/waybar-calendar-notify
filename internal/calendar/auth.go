@@ -27,8 +27,19 @@ func (opts *AuthOptions) Validate() error {
 		return fmt.Errorf("auth options cannot be nil")
 	}
 
+	// Allow empty path for embedded secrets - validation will happen during LoadClientSecrets
 	if opts.ClientSecretsPath == "" {
-		return fmt.Errorf("client secrets path is required for device flow authentication")
+		// Will use embedded secrets - no validation needed here
+		return nil
+	}
+	
+	// If path is provided, validate file exists
+	if _, err := os.Stat(opts.ClientSecretsPath); err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist, but embedded secrets might be available as fallback
+			return nil
+		}
+		return fmt.Errorf("client secrets file not accessible: %w", err)
 	}
 
 	return nil
@@ -53,7 +64,7 @@ func NewAuthManager(cacheDir string, opts *AuthOptions, verbose bool) (*AuthMana
 	// Set default options if none provided
 	if opts == nil {
 		opts = &AuthOptions{
-			ClientSecretsPath: "client_secrets_device_oauth.json",
+			ClientSecretsPath: "", // Use embedded secrets by default
 		}
 	}
 
