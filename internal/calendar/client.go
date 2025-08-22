@@ -11,7 +11,7 @@ type Client struct {
 	service     *CalendarService
 }
 
-func NewClient(cacheDir string, opts *AuthOptions) (*Client, error) {
+func NewClient(cacheDir string, opts *AuthOptions, verbose bool) (*Client, error) {
 	if cacheDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -20,7 +20,7 @@ func NewClient(cacheDir string, opts *AuthOptions) (*Client, error) {
 		cacheDir = filepath.Join(homeDir, ".cache", "waybar-calendar-notify")
 	}
 
-	authManager, err := NewAuthManager(cacheDir, opts)
+	authManager, err := NewAuthManager(cacheDir, opts, verbose)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create auth manager: %w", err)
 	}
