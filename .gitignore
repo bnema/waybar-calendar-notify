@@ -33,3 +33,6 @@ Thumbs.db
 go.work.sum
 
 docs.local/
+
+# Development tools
+.serena/
