@@ -28,7 +28,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("=== Calendar Status ===")
 
 	// Check authentication
-	client, err := calendar.NewClient(cacheDir, nil, verbose, &cfg.Calendars)
+	client, err := calendar.NewClient(cacheDir, verbose, &cfg.Calendars)
 	if err != nil {
 		fmt.Printf("%s Authentication: Failed to initialize (%v)\n", nerdfonts.ExclamationTriangle, err)
 	} else if client.HasValidToken() {
@@ -51,7 +51,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Cached events: %d\n", eventCache.EventCount())
 
 	if !eventCache.LastSync.IsZero() {
-		fmt.Printf("Last sync: %s (%s ago)\n", 
+		fmt.Printf("Last sync: %s (%s ago)\n",
 			eventCache.LastSync.Format("2006-01-02 15:04:05"),
 			time.Since(eventCache.LastSync).Truncate(time.Second))
 	} else {
@@ -61,7 +61,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Show today's events
 	fmt.Println("\n=== Today's Events ===")
 	todaysEvents := eventCache.GetTodaysEvents()
-	
+
 	if len(todaysEvents) == 0 {
 		fmt.Printf("%s No events today\n", nerdfonts.Calendar)
 		return nil
@@ -87,7 +87,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			symbol = nerdfonts.Clock
 			status = "UPCOMING"
 			upcoming++
-			
+
 			minutes := event.MinutesUntilStart(now)
 			if minutes < 60 {
 				status = fmt.Sprintf("UPCOMING (in %dm)", minutes)
@@ -101,7 +101,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Printf("%s %s %s - %s\n", symbol, event.GetTimeString(), event.Summary, status)
-		
+
 		if event.Location != "" {
 			fmt.Printf("%s %s\n", nerdfonts.MapPin, event.Location)
 		}

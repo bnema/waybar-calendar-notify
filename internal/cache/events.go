@@ -37,14 +37,14 @@ func NewCacheEntry(event calendar.Event) CacheEntry {
 
 func (ce *CacheEntry) ToEvent() calendar.Event {
 	return calendar.Event{
-		ID:          ce.EventID,
-		Summary:     ce.Summary,
-		StartTime:   ce.StartTime,
-		EndTime:     ce.EndTime,
-		Location:    ce.Location,
-		IsAllDay:    ce.IsAllDay,
-		Status:      ce.Status,
-		IsBusy:      ce.IsBusy,
+		ID:        ce.EventID,
+		Summary:   ce.Summary,
+		StartTime: ce.StartTime,
+		EndTime:   ce.EndTime,
+		Location:  ce.Location,
+		IsAllDay:  ce.IsAllDay,
+		Status:    ce.Status,
+		IsBusy:    ce.IsBusy,
 	}
 }
 
@@ -146,12 +146,12 @@ func (ce *CacheEntry) GetTimeString() string {
 
 	start := ce.StartTime.Format("15:04")
 	end := ce.EndTime.Format("15:04")
-	
+
 	// If it's on the same day, just show times
 	if ce.StartTime.YearDay() == ce.EndTime.YearDay() {
 		return start + "-" + end
 	}
-	
+
 	// Multi-day event
 	return ce.StartTime.Format("Jan 2 15:04") + "-" + ce.EndTime.Format("Jan 2 15:04")
 }

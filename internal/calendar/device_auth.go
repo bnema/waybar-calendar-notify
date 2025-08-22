@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,20 +19,14 @@ import (
 	"github.com/bnema/waybar-calendar-notify/internal/security"
 )
 
-// CalendarScopes defines all necessary scopes for calendar access including shared calendars
-var CalendarScopes = []string{
-	"https://www.googleapis.com/auth/calendar.readonly", // Read access to all calendars and events including shared ones
-}
-
 // DeviceAuthManager handles OAuth 2.0 device flow authentication
 type DeviceAuthManager struct {
-	clientID     string
-	clientSecret string
-	tokenPath    string
-	cacheDir     string
-	httpClient   *http.Client
-	encryptor    *security.TokenEncryptor
-	logger       *security.SecureLogger
+	clientID   string
+	tokenPath  string
+	cacheDir   string
+	httpClient *http.Client
+	encryptor  *security.TokenEncryptor
+	logger     *security.SecureLogger
 }
 
 // DeviceCodeResponse represents the response from the device authorization endpoint
@@ -62,26 +57,10 @@ func (e *PollError) Error() string {
 	return fmt.Sprintf("poll error: %s - %s", e.ErrorCode, e.Description)
 }
 
-// ClientSecrets represents the structure of the OAuth client secrets JSON file
-type ClientSecrets struct {
-	Installed struct {
-		ClientID     string `json:"client_id"`
-		ClientSecret string `json:"client_secret"`
-		AuthURI      string `json:"auth_uri"`
-		TokenURI     string `json:"token_uri"`
-	} `json:"installed"`
-}
-
 // NewDeviceAuthManager creates a new device authentication manager
-func NewDeviceAuthManager(cacheDir, clientSecretsPath string, verbose bool) (*DeviceAuthManager, error) {
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+func NewDeviceAuthManager(cacheDir string, verbose bool) (*DeviceAuthManager, error) {
+	if err := os.MkdirAll(cacheDir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
-	}
-
-	// Load client secrets
-	secrets, err := LoadClientSecrets(clientSecretsPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load client secrets: %w", err)
 	}
 
 	// Initialize token encryptor
@@ -94,13 +73,12 @@ func NewDeviceAuthManager(cacheDir, clientSecretsPath string, verbose bool) (*De
 	logger := security.NewSecureLogger(verbose)
 
 	return &DeviceAuthManager{
-		clientID:     secrets.Installed.ClientID,
-		clientSecret: secrets.Installed.ClientSecret,
-		tokenPath:    fmt.Sprintf("%s/token.enc", cacheDir),
-		cacheDir:     cacheDir,
-		httpClient:   &http.Client{Timeout: 30 * time.Second},
-		encryptor:    encryptor,
-		logger:       logger,
+		clientID:   GoogleOAuthClientID,
+		tokenPath:  filepath.Join(cacheDir, "token.enc"),
+		cacheDir:   cacheDir,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		encryptor:  encryptor,
+		logger:     logger,
 	}, nil
 }
 
@@ -152,7 +130,7 @@ func (d *DeviceAuthManager) requestDeviceCode(ctx context.Context) (*DeviceCodeR
 		"scope":     {strings.Join(CalendarScopes, " ")},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://oauth2.googleapis.com/device/code", strings.NewReader(params.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", DeviceAuthURL, strings.NewReader(params.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -202,12 +180,12 @@ func (d *DeviceAuthManager) displayAuthInstructions(deviceResp *DeviceCodeRespon
 	fmt.Printf("════════════════════════════════\n\n")
 	fmt.Printf("%s Please visit: %s\n", nerdfonts.Globe, deviceResp.VerificationURL)
 	fmt.Printf("%s Enter code: %s\n\n", nerdfonts.InfoCircle, deviceResp.UserCode)
-	
+
 	if deviceResp.ExpiresIn > 0 {
 		minutes := deviceResp.ExpiresIn / 60
 		fmt.Printf("This code expires in %d minutes\n", minutes)
 	}
-	
+
 	fmt.Printf("%s Waiting for authorization...\n\n", nerdfonts.Timer)
 }
 
@@ -226,7 +204,7 @@ func (d *DeviceAuthManager) pollForToken(ctx context.Context, deviceResp *Device
 
 		case <-ticker.C:
 			pollCount++
-			
+
 			if time.Now().After(deadline) {
 				return nil, fmt.Errorf("device code expired after %d polls", pollCount)
 			}
@@ -268,15 +246,15 @@ func (d *DeviceAuthManager) pollForToken(ctx context.Context, deviceResp *Device
 }
 
 // exchangeDeviceCode exchanges the device code for an access token
+// Note: For device flow, only client_id is needed, not client_secret
 func (d *DeviceAuthManager) exchangeDeviceCode(ctx context.Context, deviceCode string) (*oauth2.Token, error) {
 	params := url.Values{
-		"client_id":     {d.clientID},
-		"client_secret": {d.clientSecret},
-		"device_code":   {deviceCode},
-		"grant_type":    {"urn:ietf:params:oauth:grant-type:device_code"},
+		"client_id":   {d.clientID},
+		"device_code": {deviceCode},
+		"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://oauth2.googleapis.com/token", strings.NewReader(params.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", TokenURL, strings.NewReader(params.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -359,56 +337,13 @@ func (d *DeviceAuthManager) SaveToken(token *oauth2.Token) error {
 }
 
 // GetOAuth2Client creates an OAuth2 client with the provided token
+// Note: For device flow, only client_id is needed, not client_secret
 func (d *DeviceAuthManager) GetOAuth2Client(ctx context.Context, token *oauth2.Token) *http.Client {
 	config := &oauth2.Config{
-		ClientID:     d.clientID,
-		ClientSecret: d.clientSecret,
-		Endpoint:     google.Endpoint,
-		Scopes:       CalendarScopes,
+		ClientID: d.clientID,
+		Endpoint: google.Endpoint,
+		Scopes:   CalendarScopes,
 	}
 
 	return config.Client(ctx, token)
-}
-
-//garble:controlflow flatten_passes=1 junk_jumps=3
-func LoadClientSecrets(path string) (*ClientSecrets, error) {
-	// Try embedded secrets first if no path provided or path is "embedded"
-	if path == "" || path == "embedded" {
-		embeddedSecrets, err := LoadEmbeddedSecrets()
-		if err == nil {
-			return embeddedSecrets, nil
-		}
-		// If embedded fails and no path, return error
-		if path == "" {
-			return nil, fmt.Errorf("embedded secrets unavailable and no file path provided: %w", err)
-		}
-	}
-	
-	// Try file-based loading
-	data, err := os.ReadFile(path)
-	if err != nil {
-		// Try embedded as final fallback if file doesn't exist
-		if os.IsNotExist(err) {
-			embeddedSecrets, embeddedErr := LoadEmbeddedSecrets()
-			if embeddedErr == nil {
-				return embeddedSecrets, nil
-			}
-		}
-		return nil, fmt.Errorf("failed to read client secrets file '%s': %w", path, err)
-	}
-
-	var secrets ClientSecrets
-	if err := json.Unmarshal(data, &secrets); err != nil {
-		return nil, fmt.Errorf("failed to parse client secrets JSON: %w", err)
-	}
-
-	// Validate required fields
-	if secrets.Installed.ClientID == "" {
-		return nil, fmt.Errorf("client_id is missing from client secrets")
-	}
-	if secrets.Installed.ClientSecret == "" {
-		return nil, fmt.Errorf("client_secret is missing from client secrets")
-	}
-
-	return &secrets, nil
 }

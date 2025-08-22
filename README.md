@@ -4,46 +4,29 @@ A CLI tool that integrates Google Calendar with Waybar, providing real-time cale
 
 ## Features
 
-- Fetch Google Calendar events via OAuth 2.0 device flow
+- Secure OAuth 2.0 device flow authentication - no credentials needed!
 - Output calendar data in Waybar JSON format with tooltips
 - Send desktop notifications for upcoming events
 - Cache events locally for performance
 - Support for multiple output formats (JSON, text)
+- Safe to distribute and open source
 
-## Google Cloud Setup
+## Authentication
 
-To use your own Google Calendar credentials:
+This app uses **Google OAuth 2.0 Device Flow** - no client secrets or credentials are needed! The authentication flow is completely secure and follows industry best practices.
 
-### 1. Create Google Cloud Project
+### First Time Setup
+1. Run: `waybar-calendar-notify auth`
+2. Visit the URL shown and enter the code displayed
+3. Authorize the app in your browser with your Google account
+4. That's it! The app will securely store your tokens locally
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable the Google Calendar API:
-   - Go to "APIs & Services" > "Library"
-   - Search for "Google Calendar API"
-   - Click "Enable"
-
-### 2. Configure OAuth Consent Screen
-
-1. Go to "APIs & Services" > "OAuth consent screen"
-2. Choose "External" user type (unless you have Google Workspace)
-3. Fill required fields:
-   - App name: `waybar-calendar-notify`
-   - User support email: your email
-   - Developer contact: your email
-4. Add scopes:
-   - `https://www.googleapis.com/auth/calendar.readonly`
-5. Add your email to test users
-
-### 3. Create OAuth Credentials
-
-1. Go to "APIs & Services" > "Credentials"
-2. Click "Create Credentials" > "OAuth client ID"
-3. Select "Desktop application"
-4. Name it `waybar-calendar-notify`
-5. Download the JSON file
-6. Rename it to `client_secrets_device_oauth.json`
-7. Place it in the project root directory
+### Security
+- Uses OAuth 2.0 Device Flow (RFC 8628) - the same method used by major CLI tools
+- No embedded secrets or credentials in the application
+- Tokens are encrypted and stored locally with restrictive permissions
+- Safe to distribute publicly and contribute to open source
+- No risk of credential leaks when sharing or publishing the binary
 
 ## Installation
 
@@ -54,25 +37,11 @@ To use your own Google Calendar credentials:
 git clone https://github.com/bnema/waybar-calendar-notify.git
 cd waybar-calendar-notify
 
-# Place your client_secrets_device_oauth.json in project root
-
-# Build
+# Build - no credentials needed!
 make build
 
 # Or build locally for development
 make build-local
-```
-
-### Build Obfuscated (Optional)
-
-To embed credentials in the binary:
-
-```bash
-# Install garble
-go install mvdan.cc/garble@latest
-
-# Build obfuscated binary with embedded secrets
-make build-obfuscated-release
 ```
 
 ## Usage
@@ -80,13 +49,13 @@ make build-obfuscated-release
 ### Authentication
 
 ```bash
-# Authenticate with Google Calendar
+# Authenticate with Google Calendar - no credentials needed!
 ./bin/waybar-calendar-notify auth
 
 # Check authentication status
 ./bin/waybar-calendar-notify auth --status
 
-# Revoke authentication
+# Clear local authentication (forces re-auth)
 ./bin/waybar-calendar-notify auth --revoke
 ```
 
@@ -163,7 +132,7 @@ systemctl --user start waybar-calendar-notify.service
 
 The tool uses these configuration files:
 - `~/.config/waybar-calendar-notify/config.yaml` - Main configuration
-- `~/.config/waybar-calendar-notify/token.json` - OAuth token (auto-generated)
+- `~/.cache/waybar-calendar-notify/token.enc` - Encrypted OAuth tokens (auto-generated securely)
 
 ## Development
 

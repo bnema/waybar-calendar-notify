@@ -27,7 +27,7 @@ func New(cacheDir string) *Cache {
 	}
 
 	filePath := filepath.Join(cacheDir, "events.json")
-	
+
 	return &Cache{
 		Events:   []CacheEntry{},
 		LastSync: time.Time{},
@@ -38,7 +38,7 @@ func New(cacheDir string) *Cache {
 
 func (c *Cache) Load() error {
 	// Ensure cache directory exists
-	if err := os.MkdirAll(c.cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(c.cacheDir, 0750); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -61,7 +61,7 @@ func (c *Cache) Load() error {
 
 func (c *Cache) Save() error {
 	// Ensure cache directory exists
-	if err := os.MkdirAll(c.cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(c.cacheDir, 0750); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -70,7 +70,7 @@ func (c *Cache) Save() error {
 		return fmt.Errorf("failed to marshal cache: %w", err)
 	}
 
-	if err := os.WriteFile(c.filePath, data, 0644); err != nil {
+	if err := os.WriteFile(c.filePath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 
@@ -79,7 +79,7 @@ func (c *Cache) Save() error {
 
 func (c *Cache) UpdateEvents(events []calendar.Event) []CacheEntry {
 	c.LastSync = time.Now()
-	
+
 	// Create a map of existing events for quick lookup
 	existingEvents := make(map[string]*CacheEntry)
 	for i := range c.Events {
@@ -118,13 +118,13 @@ func (c *Cache) UpdateEvents(events []calendar.Event) []CacheEntry {
 
 func (c *Cache) GetEventsNeedingNotification(notificationType string, now time.Time) []CacheEntry {
 	var needingNotification []CacheEntry
-	
+
 	for i := range c.Events {
 		if c.Events[i].ShouldNotify(notificationType, now) {
 			needingNotification = append(needingNotification, c.Events[i])
 		}
 	}
-	
+
 	return needingNotification
 }
 
@@ -139,25 +139,25 @@ func (c *Cache) MarkAsNotified(eventID, notificationType string) {
 
 func (c *Cache) GetCurrentEvents(now time.Time) []CacheEntry {
 	var currentEvents []CacheEntry
-	
+
 	for _, event := range c.Events {
 		if event.IsCurrentAt(now) {
 			currentEvents = append(currentEvents, event)
 		}
 	}
-	
+
 	return currentEvents
 }
 
 func (c *Cache) GetUpcomingEvents(now time.Time) []CacheEntry {
 	var upcomingEvents []CacheEntry
-	
+
 	for _, event := range c.Events {
 		if event.IsUpcomingAt(now) {
 			upcomingEvents = append(upcomingEvents, event)
 		}
 	}
-	
+
 	return upcomingEvents
 }
 
@@ -167,14 +167,14 @@ func (c *Cache) GetTodaysEvents() []CacheEntry {
 	endOfDay := startOfDay.Add(24 * time.Hour).Add(-time.Nanosecond)
 
 	var todaysEvents []CacheEntry
-	
+
 	for _, event := range c.Events {
 		// Event overlaps with today
 		if event.StartTime.Before(endOfDay) && event.EndTime.After(startOfDay) {
 			todaysEvents = append(todaysEvents, event)
 		}
 	}
-	
+
 	return todaysEvents
 }
 
@@ -198,7 +198,7 @@ func (c *Cache) EventCount() int {
 func (c *Cache) CleanOldEvents(maxAge time.Duration) int {
 	cleaned := 0
 	filtered := make([]CacheEntry, 0, len(c.Events))
-	
+
 	for _, event := range c.Events {
 		if !event.IsExpired(maxAge) {
 			filtered = append(filtered, event)
@@ -206,7 +206,7 @@ func (c *Cache) CleanOldEvents(maxAge time.Duration) int {
 			cleaned++
 		}
 	}
-	
+
 	c.Events = filtered
 	return cleaned
 }

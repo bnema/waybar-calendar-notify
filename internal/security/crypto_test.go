@@ -10,7 +10,7 @@ import (
 func TestTokenEncryption(t *testing.T) {
 	// Create temporary directory for test
 	tempDir := t.TempDir()
-	
+
 	encryptor, err := NewTokenEncryptor(tempDir)
 	if err != nil {
 		t.Fatalf("Failed to create TokenEncryptor: %v", err)

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	
+
 	"github.com/bnema/waybar-calendar-notify/internal/cache"
 	"github.com/bnema/waybar-calendar-notify/internal/config"
 	"github.com/bnema/waybar-calendar-notify/internal/logger"
@@ -14,10 +14,9 @@ import (
 var (
 	cacheDir string
 	verbose  bool
-	clientSecretsPath string
 	cfgFile  string
 	cfg      *config.Config
-	
+
 	// Version information
 	version    string
 	commitHash string
@@ -45,7 +44,7 @@ func SetVersionInfo(v, commit, buildTimeStr string) {
 	version = v
 	commitHash = commit
 	buildTime = buildTimeStr
-	
+
 	// Set version on root command
 	rootCmd.Version = fmt.Sprintf("%s (commit: %s, built: %s)", version, commitHash, buildTime)
 }
@@ -57,7 +56,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cacheDir, "cache-dir", "", "cache directory (default: ~/.cache/waybar-calendar-notify)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/waybar-calendar-notify/config.toml)")
-	rootCmd.PersistentFlags().StringVar(&clientSecretsPath, "client-secrets", "", "path to client secrets JSON file (default: client_secrets_device_oauth.json)")
 
 	// Add subcommands
 	rootCmd.AddCommand(syncCmd)

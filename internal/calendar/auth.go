@@ -17,60 +17,20 @@ import (
 	"github.com/bnema/waybar-calendar-notify/internal/security"
 )
 
-type AuthOptions struct {
-	ClientSecretsPath string // Path to client secrets JSON file (for device flow)
-}
-
-// Validate validates the AuthOptions configuration
-func (opts *AuthOptions) Validate() error {
-	if opts == nil {
-		return fmt.Errorf("auth options cannot be nil")
-	}
-
-	// Allow empty path for embedded secrets - validation will happen during LoadClientSecrets
-	if opts.ClientSecretsPath == "" {
-		// Will use embedded secrets - no validation needed here
-		return nil
-	}
-	
-	// If path is provided, validate file exists
-	if _, err := os.Stat(opts.ClientSecretsPath); err != nil {
-		if os.IsNotExist(err) {
-			// File doesn't exist, but embedded secrets might be available as fallback
-			return nil
-		}
-		return fmt.Errorf("client secrets file not accessible: %w", err)
-	}
-
-	return nil
-}
-
+// AuthManager handles OAuth authentication using device flow
 type AuthManager struct {
 	tokenPath  string
 	cacheDir   string
 	httpClient *security.SecureHTTPClient
 	encryptor  *security.TokenEncryptor
 	logger     *security.SecureLogger
-	opts       *AuthOptions
 	verbose    bool
 }
 
-
-func NewAuthManager(cacheDir string, opts *AuthOptions, verbose bool) (*AuthManager, error) {
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+// NewAuthManager creates a new authentication manager
+func NewAuthManager(cacheDir string, verbose bool) (*AuthManager, error) {
+	if err := os.MkdirAll(cacheDir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
-	}
-
-	// Set default options if none provided
-	if opts == nil {
-		opts = &AuthOptions{
-			ClientSecretsPath: "", // Use embedded secrets by default
-		}
-	}
-
-	// Validate options
-	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid auth options: %w", err)
 	}
 
 	// Initialize token encryptor
@@ -94,35 +54,34 @@ func NewAuthManager(cacheDir string, opts *AuthOptions, verbose bool) (*AuthMana
 		httpClient: httpClient,
 		encryptor:  encryptor,
 		logger:     logger,
-		opts:       opts,
 		verbose:    verbose,
 	}
 
 	// Log initialization for device flow
 	logger.LogSecurityEvent("auth_manager_initialized", security.SeverityInfo, map[string]any{
-		"cache_dir":      cacheDir,
-		"auth_method":    "device_flow",
-		"client_secrets": security.RedactString(opts.ClientSecretsPath),
+		"cache_dir":   cacheDir,
+		"auth_method": "device_flow",
 	})
 
 	return authManager, nil
 }
 
+// GetClient returns an authenticated HTTP client
 func (a *AuthManager) GetClient(ctx context.Context) (*http.Client, error) {
 	startTime := time.Now()
-	
+
 	token, err := a.loadToken()
 	if err != nil {
 		a.logger.LogAuthEvent("token_load", false, map[string]any{
 			"error": err.Error(),
 		})
-		
+
 		// No token, need full auth via device flow
 		token, err = a.authenticateViaDevice(ctx)
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if err := a.saveToken(token); err != nil {
 			a.logger.Error("Failed to save token after authentication", "error", err)
 		}
@@ -130,13 +89,13 @@ func (a *AuthManager) GetClient(ctx context.Context) (*http.Client, error) {
 		a.logger.LogAuthEvent("token_refresh_attempt", true, map[string]any{
 			"token_expired": true,
 		})
-		
+
 		// Token expired, try refresh
 		if err := a.RefreshToken(ctx); err != nil {
 			a.logger.LogAuthEvent("token_refresh", false, map[string]any{
 				"error": err.Error(),
 			})
-			
+
 			// Refresh failed, need full re-auth via device flow
 			token, err = a.authenticateViaDevice(ctx)
 			if err != nil {
@@ -147,7 +106,7 @@ func (a *AuthManager) GetClient(ctx context.Context) (*http.Client, error) {
 			token, _ = a.loadToken()
 			a.logger.LogAuthEvent("token_refresh", true, nil)
 		}
-		
+
 		if err := a.saveToken(token); err != nil {
 			a.logger.Error("Failed to save token after refresh", "error", err)
 		}
@@ -159,9 +118,11 @@ func (a *AuthManager) GetClient(ctx context.Context) (*http.Client, error) {
 
 	// Create OAuth2 client with token
 	config := &oauth2.Config{
+		ClientID: GoogleOAuthClientID,
 		Endpoint: google.Endpoint,
+		Scopes:   CalendarScopes,
 	}
-	
+
 	duration := time.Since(startTime)
 	a.logger.LogAuthEvent("client_created", true, map[string]any{
 		"duration": duration.String(),
@@ -170,14 +131,14 @@ func (a *AuthManager) GetClient(ctx context.Context) (*http.Client, error) {
 	return config.Client(ctx, token), nil
 }
 
-
+// authenticateViaDevice performs device flow authentication
 func (a *AuthManager) authenticateViaDevice(ctx context.Context) (*oauth2.Token, error) {
 	a.logger.LogAuthEvent("device_auth_start", true, map[string]any{
-		"client_secrets_path": security.RedactString(a.opts.ClientSecretsPath),
+		"client_id": security.RedactString(GoogleOAuthClientID),
 	})
 
-	// Initialize device auth manager
-	deviceAuth, err := NewDeviceAuthManager(a.cacheDir, a.opts.ClientSecretsPath, a.verbose)
+	// Initialize device auth manager (no client secrets needed)
+	deviceAuth, err := NewDeviceAuthManager(a.cacheDir, a.verbose)
 	if err != nil {
 		a.logger.LogAuthEvent("device_auth_init", false, map[string]any{
 			"error": err.Error(),
@@ -201,8 +162,7 @@ func (a *AuthManager) authenticateViaDevice(ctx context.Context) (*oauth2.Token,
 	return token, nil
 }
 
-
-
+// loadToken loads and decrypts the stored token
 func (a *AuthManager) loadToken() (*oauth2.Token, error) {
 	encrypted, err := os.ReadFile(a.tokenPath)
 	if err != nil {
@@ -229,6 +189,7 @@ func (a *AuthManager) loadToken() (*oauth2.Token, error) {
 	return &token, nil
 }
 
+// saveToken encrypts and saves the token
 func (a *AuthManager) saveToken(token *oauth2.Token) error {
 	tokenData, err := json.Marshal(token)
 	if err != nil {
@@ -258,6 +219,7 @@ func (a *AuthManager) saveToken(token *oauth2.Token) error {
 	return nil
 }
 
+// RefreshToken refreshes the OAuth token using the refresh token
 func (a *AuthManager) RefreshToken(ctx context.Context) error {
 	token, err := a.loadToken()
 	if err != nil {
@@ -268,30 +230,25 @@ func (a *AuthManager) RefreshToken(ctx context.Context) error {
 		return security.NewTokenError("refresh", "no refresh token available")
 	}
 
-	// Use device flow refresh
+	// Use device flow refresh (no client_secret needed)
 	return a.refreshTokenForDeviceFlow(ctx, token)
 }
 
+// refreshTokenForDeviceFlow refreshes tokens using device flow (no client_secret)
 func (a *AuthManager) refreshTokenForDeviceFlow(ctx context.Context, token *oauth2.Token) error {
 	a.logger.LogAuthEvent("device_token_refresh_start", true, map[string]any{
 		"has_refresh_token": token.RefreshToken != "",
 	})
 
-	// Load client secrets for device flow
-	secrets, err := LoadClientSecrets(a.opts.ClientSecretsPath)
-	if err != nil {
-		return fmt.Errorf("failed to load client secrets for token refresh: %w", err)
-	}
-
 	// Create refresh request to Google's token endpoint
+	// For device flow, only client_id is needed, not client_secret
 	params := url.Values{
-		"client_id":     {secrets.Installed.ClientID},
-		"client_secret": {secrets.Installed.ClientSecret},
+		"client_id":     {GoogleOAuthClientID},
 		"refresh_token": {token.RefreshToken},
 		"grant_type":    {"refresh_token"},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://oauth2.googleapis.com/token", strings.NewReader(params.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", TokenURL, strings.NewReader(params.Encode()))
 	if err != nil {
 		return fmt.Errorf("failed to create refresh request: %w", err)
 	}
@@ -302,7 +259,7 @@ func (a *AuthManager) refreshTokenForDeviceFlow(ctx context.Context, token *oaut
 	resp, err := a.httpClient.Do(req)
 	duration := time.Since(startTime)
 
-	a.logger.LogNetworkEvent("POST", "https://oauth2.googleapis.com/token", 0, duration.String())
+	a.logger.LogNetworkEvent("POST", TokenURL, 0, duration.String())
 
 	if err != nil {
 		a.logger.LogAuthEvent("device_token_refresh_failed", false, map[string]any{
@@ -316,14 +273,14 @@ func (a *AuthManager) refreshTokenForDeviceFlow(ctx context.Context, token *oaut
 		}
 	}()
 
-	a.logger.LogNetworkEvent("POST", "https://oauth2.googleapis.com/token", resp.StatusCode, duration.String())
+	a.logger.LogNetworkEvent("POST", TokenURL, resp.StatusCode, duration.String())
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp struct {
 			Error            string `json:"error"`
 			ErrorDescription string `json:"error_description"`
 		}
-		
+
 		if decodeErr := json.NewDecoder(resp.Body).Decode(&errResp); decodeErr == nil {
 			a.logger.LogAuthEvent("device_token_refresh_failed", false, map[string]any{
 				"error":             errResp.Error,
@@ -365,7 +322,7 @@ func (a *AuthManager) refreshTokenForDeviceFlow(ctx context.Context, token *oaut
 	return a.saveToken(token)
 }
 
-
+// ClearLocalToken removes the stored authentication token
 func (a *AuthManager) ClearLocalToken() error {
 	if err := os.Remove(a.tokenPath); err != nil && !os.IsNotExist(err) {
 		return security.NewTokenError("clear", "failed to remove token file").WithCause(err)
@@ -378,42 +335,41 @@ func (a *AuthManager) ClearLocalToken() error {
 	return nil
 }
 
+// HasValidToken checks if a valid token exists
 func (a *AuthManager) HasValidToken() bool {
 	token, err := a.loadToken()
 	isValid := err == nil && token.Valid()
-	
+
 	a.logger.LogAuthEvent("token_validation", isValid, map[string]any{
 		"has_token": err == nil,
 		"is_valid":  isValid,
 	})
-	
+
 	return isValid
 }
 
 // Close cleans up resources and clears sensitive data from memory
 func (a *AuthManager) Close() error {
 	var errs []error
-	
+
 	// Close HTTP client connections if available
 	if a.httpClient != nil {
 		a.httpClient.Close()
 	}
-	
-	// Config is managed separately - no need to clear
-	
+
 	// Clear encryptor (which may contain sensitive keys)
 	a.encryptor = nil
-	
+
 	// Log cleanup completion
 	if a.logger != nil {
 		a.logger.LogSecurityEvent("auth_manager_closed", security.SeverityInfo, map[string]any{
 			"cache_dir": a.cacheDir,
 		})
 	}
-	
+
 	// Clear logger reference
 	a.logger = nil
-	
+
 	if len(errs) > 0 {
 		return fmt.Errorf("cleanup errors: %v", errs)
 	}

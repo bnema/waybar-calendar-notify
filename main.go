@@ -17,7 +17,7 @@ var (
 func main() {
 	// Pass version info to cmd package if needed
 	cmd.SetVersionInfo(Version, CommitHash, BuildTime)
-	
+
 	if err := cmd.Execute(); err != nil {
 		logger.Error("Command execution failed", "error", err)
 		os.Exit(1)

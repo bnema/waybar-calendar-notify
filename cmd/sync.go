@@ -15,11 +15,11 @@ import (
 )
 
 var (
-	formatFlag       string
-	notifyFlag       bool
-	notifyUpcoming   bool
-	cacheEvents      bool
-	noTooltipFlag    bool
+	formatFlag     string
+	notifyFlag     bool
+	notifyUpcoming bool
+	cacheEvents    bool
+	noTooltipFlag  bool
 )
 
 var syncCmd = &cobra.Command{
@@ -60,7 +60,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize calendar client with config
-	client, err := calendar.NewClient(cacheDir, nil, verbose, &cfg.Calendars)
+	client, err := calendar.NewClient(cacheDir, verbose, &cfg.Calendars)
 	if err != nil {
 		return fmt.Errorf("failed to initialize calendar client: %w", err)
 	}
@@ -112,9 +112,9 @@ func runSync(cmd *cobra.Command, args []string) error {
 	formatter.SetShowLocation(cfg.Display.ShowLocation)
 	formatter.SetShowDescription(cfg.Display.ShowDescription)
 	formatter.SetDateFormat(cfg.Display.DateFormat)
-	
+
 	cacheEntries := eventCache.GetTodaysEvents()
-	
+
 	output := formatter.FormatCalendarOutput(cacheEntries, now)
 
 	// Handle no-tooltip flag
@@ -147,12 +147,12 @@ func sendNotifications(eventCache *cache.Cache, cfg *config.Config) error {
 	for _, minutes := range cfg.Notifications.ReminderTimes {
 		notifyType := fmt.Sprintf("%dmin", minutes)
 		events := eventCache.GetEventsNeedingNotification(notifyType, now)
-		
+
 		if len(events) > 0 {
 			if err := n.SendBulkEventReminder(events, minutes); err != nil {
 				return fmt.Errorf("failed to send %d-minute notifications: %w", minutes, err)
 			}
-			
+
 			// Mark as notified
 			for _, event := range events {
 				eventCache.MarkAsNotified(event.EventID, notifyType)
@@ -166,7 +166,7 @@ func sendNotifications(eventCache *cache.Cache, cfg *config.Config) error {
 		if err := n.SendBulkEventReminder(eventsStart, 0); err != nil {
 			return fmt.Errorf("failed to send start notifications: %w", err)
 		}
-		
+
 		// Mark as notified
 		for _, event := range eventsStart {
 			eventCache.MarkAsNotified(event.EventID, "start")
@@ -176,4 +176,3 @@ func sendNotifications(eventCache *cache.Cache, cfg *config.Config) error {
 	// Save cache with updated notification status
 	return eventCache.Save()
 }
-

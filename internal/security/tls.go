@@ -9,10 +9,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/bnema/waybar-calendar-notify/internal/logger"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/bnema/waybar-calendar-notify/internal/logger"
 )
 
 // SecureHTTPClient provides an HTTP client with enhanced security features
@@ -88,7 +89,7 @@ func (sc *SecureHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", "waybar-calendar-notify/1.0")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Cache-Control", "no-cache")
-	
+
 	// Validate request URL is for our relay
 	if !sc.isAllowedURL(req.URL.String()) {
 		return nil, fmt.Errorf("request URL not allowed: %s", req.URL.String())
@@ -143,7 +144,7 @@ func (sc *SecureHTTPClient) PostWithContext(ctx context.Context, url, contentTyp
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Content-Type", contentType)
 	return sc.Do(req)
 }
@@ -202,7 +203,7 @@ func verifyCertificatePin(rawCerts [][]byte, expectedFingerprint string) error {
 	for _, rawCert := range rawCerts {
 		hash := sha256.Sum256(rawCert)
 		fingerprint := "sha256:" + hex.EncodeToString(hash[:])
-		
+
 		if fingerprint == expectedFingerprint {
 			return nil // Match found
 		}
@@ -233,6 +234,6 @@ func GetCertificateFingerprint(hostname string) (string, error) {
 
 	hash := sha256.Sum256(certs[0].Raw)
 	fingerprint := "sha256:" + hex.EncodeToString(hash[:])
-	
+
 	return fingerprint, nil
 }

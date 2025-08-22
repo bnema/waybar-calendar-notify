@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
+
 	"github.com/bnema/waybar-calendar-notify/internal/calendar"
 	"github.com/bnema/waybar-calendar-notify/internal/nerdfonts"
+	"github.com/spf13/cobra"
 )
 
 var calendarsCmd = &cobra.Command{
@@ -21,7 +22,7 @@ Example:
 }
 
 func runCalendars(cmd *cobra.Command, args []string) error {
-	client, err := calendar.NewClient(cacheDir, nil, verbose, nil)
+	client, err := calendar.NewClient(cacheDir, verbose, nil)
 	if err != nil {
 		return fmt.Errorf("failed to initialize calendar client: %w", err)
 	}
@@ -41,7 +42,7 @@ func runCalendars(cmd *cobra.Command, args []string) error {
 		if cal.Primary {
 			icon = nerdfonts.CheckCircle + " " + nerdfonts.Calendar
 		}
-		
+
 		fmt.Printf("%s %s\n", icon, cal.Summary)
 		fmt.Printf("  ID: %s\n", cal.Id)
 		if cal.Description != "" {
@@ -53,7 +54,7 @@ func runCalendars(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println()
 	}
-	
+
 	fmt.Printf("Total calendars: %d\n", len(calendars))
 	fmt.Println("\nTo use specific calendars, add their IDs to your config file:")
 	fmt.Println("~/.config/waybar-calendar-notify/config.toml")

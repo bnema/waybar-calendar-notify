@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -20,13 +19,13 @@ var authCmd = &cobra.Command{
 	Short: "Manage Google Calendar authentication",
 	Long: `Authenticate with Google Calendar API using OAuth 2.0 device flow.
 
-This command uses device flow authentication for CLI applications and limited-input devices.
-You'll need to provide your own client_secrets_device_oauth.json file.
+This command uses device flow authentication - no credentials needed!
+Simply run the auth command and follow the on-screen instructions.
 
 Examples:
-  waybar-calendar-notify auth                    # Authenticate with device flow
-  waybar-calendar-notify auth --status           # Check authentication status
-  waybar-calendar-notify auth --revoke           # Clear local authentication`,
+  waybar-calendar-notify auth         # Start authentication
+  waybar-calendar-notify auth --status # Check auth status
+  waybar-calendar-notify auth --revoke # Clear authentication`,
 	RunE: runAuth,
 }
 
@@ -36,24 +35,8 @@ func init() {
 }
 
 func runAuth(cmd *cobra.Command, args []string) error {
-	// Configure client secrets path
-	secretsPath := clientSecretsPath
-	if secretsPath == "" {
-		secretsPath = "client_secrets_device_oauth.json"
-	}
-
-	// Validate file exists
-	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
-		return fmt.Errorf("client secrets file not found: %s", secretsPath)
-	}
-
-	// Setup auth options
-	opts := &calendar.AuthOptions{
-		ClientSecretsPath: secretsPath,
-	}
-
-	// Initialize auth manager
-	authManager, err := calendar.NewAuthManager(cacheDir, opts, verbose)
+	// Initialize auth manager (no credentials needed)
+	authManager, err := calendar.NewAuthManager(cacheDir, verbose)
 	if err != nil {
 		return fmt.Errorf("failed to initialize auth manager: %w", err)
 	}
@@ -91,7 +74,7 @@ func runAuth(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Create a calendar client to trigger auth flow
-	_, err = calendar.NewClient(cacheDir, opts, verbose, nil)
+	_, err = calendar.NewClient(cacheDir, verbose, nil)
 	if err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}

@@ -26,7 +26,6 @@ func (s ErrorSeverity) String() string {
 	}
 }
 
-
 // TokenError represents errors related to token operations
 type TokenError struct {
 	Operation string

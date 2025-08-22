@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bnema/waybar-calendar-notify/internal/logger"
 	gcal "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
-	"github.com/bnema/waybar-calendar-notify/internal/logger"
 )
 
 type Event struct {
 	ID          string
-	CalendarID  string    // Calendar ID this event belongs to
+	CalendarID  string // Calendar ID this event belongs to
 	Summary     string
 	Description string
 	StartTime   time.Time
@@ -93,11 +93,11 @@ func (c *CalendarService) GetEventsInRangeForCalendars(ctx context.Context, time
 	if len(calendarIDs) == 0 {
 		calendarIDs = []string{"primary"}
 	}
-	
+
 	var allEvents []Event
 	for _, calID := range calendarIDs {
 		logger.Debug("fetching events from calendar", "calendar_id", calID, "time_min", timeMin, "time_max", timeMax)
-		
+
 		events, err := c.service.Events.List(calID).
 			TimeMin(timeMin.Format(time.RFC3339)).
 			TimeMax(timeMax.Format(time.RFC3339)).
@@ -105,14 +105,14 @@ func (c *CalendarService) GetEventsInRangeForCalendars(ctx context.Context, time
 			OrderBy("startTime").
 			Context(ctx).
 			Do()
-		
+
 		if err != nil {
 			logger.Warn("failed to fetch events from calendar", "calendar_id", calID, "error", err)
 			continue // Skip this calendar but continue with others
 		}
-		
+
 		logger.Info("fetched events from calendar", "calendar_id", calID, "event_count", len(events.Items))
-		
+
 		for _, item := range events.Items {
 			event, err := c.convertToEvent(item)
 			if err != nil {
@@ -123,7 +123,7 @@ func (c *CalendarService) GetEventsInRangeForCalendars(ctx context.Context, time
 			allEvents = append(allEvents, event)
 		}
 	}
-	
+
 	logger.Info("total events fetched", "total_count", len(allEvents), "calendar_count", len(calendarIDs))
 	return allEvents, nil
 }
@@ -131,7 +131,7 @@ func (c *CalendarService) GetEventsInRangeForCalendars(ctx context.Context, time
 func (c *CalendarService) GetCurrentEvents() ([]Event, error) {
 	ctx := context.Background()
 	now := time.Now()
-	
+
 	// Get events that started before now and end after now
 	startTime := now.Add(-12 * time.Hour) // Look back 12 hours for current events
 	endTime := now.Add(1 * time.Minute)   // Small buffer for events ending now
@@ -262,15 +262,15 @@ func (e *Event) GetTimeString() string {
 
 	start := e.StartTime.Format("15:04")
 	end := e.EndTime.Format("15:04")
-	
+
 	// If it's on the same day, just show times
 	if e.StartTime.YearDay() == e.EndTime.YearDay() {
 		return fmt.Sprintf("%s-%s", start, end)
 	}
-	
+
 	// Multi-day event
-	return fmt.Sprintf("%s-%s", 
-		e.StartTime.Format("Jan 2 15:04"), 
+	return fmt.Sprintf("%s-%s",
+		e.StartTime.Format("Jan 2 15:04"),
 		e.EndTime.Format("Jan 2 15:04"))
 }
 
