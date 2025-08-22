@@ -7,8 +7,9 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net/http"
+
+	"github.com/bnema/waybar-calendar-notify/internal/logger"
 	"net/url"
 	"strings"
 	"time"
@@ -147,6 +148,15 @@ func (sc *SecureHTTPClient) PostWithContext(ctx context.Context, url, contentTyp
 	return sc.Do(req)
 }
 
+// Close closes idle connections in the underlying HTTP client
+func (sc *SecureHTTPClient) Close() {
+	if sc.client != nil {
+		if transport, ok := sc.client.Transport.(*http.Transport); ok {
+			transport.CloseIdleConnections()
+		}
+	}
+}
+
 // isAllowedURL checks if the URL is allowed for requests
 func (sc *SecureHTTPClient) isAllowedURL(reqURL string) bool {
 	parsedReqURL, err := url.Parse(reqURL)
@@ -212,7 +222,7 @@ func GetCertificateFingerprint(hostname string) (string, error) {
 	}
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil {
-			log.Printf("Error closing TLS connection: %v", closeErr)
+			logger.Error("Error closing TLS connection", "error", closeErr)
 		}
 	}()
 
