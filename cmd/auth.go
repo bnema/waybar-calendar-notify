@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -11,61 +10,35 @@ import (
 )
 
 var (
-	revokeFlag     bool
-	statusOnly     bool
-	useDeviceFlow  bool
-	useLocalServer bool
-	customCredFile string
+	revokeFlag bool
+	statusOnly bool
 )
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage Google Calendar authentication",
-	Long: `Authenticate with Google Calendar API using various methods.
+	Long: `Authenticate with Google Calendar API using the OAuth relay service.
 
-SIMPLIFIED USAGE (Recommended):
-  waybar-calendar-notify auth                    # Auto-select best method (device flow by default)
-  
-ADVANCED USAGE:
-  waybar-calendar-notify auth --device-flow      # Force device flow (works everywhere)
-  waybar-calendar-notify auth --local-server     # Force local server flow (requires browser)
-  waybar-calendar-notify auth --custom-creds ./credentials.json
-
-The device flow is recommended as it:
-- Works on headless/remote systems
-- Doesn't require manual credential setup
-- Provides the simplest user experience
+This command provides seamless authentication without requiring any setup or
+credential management. Authentication is handled through our secure relay service.
 
 Examples:
-  waybar-calendar-notify auth                    # Simple authentication
-  waybar-calendar-notify auth --status           # Check auth status
-  waybar-calendar-notify auth --revoke           # Revoke authentication`,
+  waybar-calendar-notify auth                    # Authenticate with Google Calendar
+  waybar-calendar-notify auth --status           # Check authentication status
+  waybar-calendar-notify auth --revoke           # Clear local authentication`,
 	RunE: runAuth,
 }
 
 func init() {
-	authCmd.Flags().BoolVar(&revokeFlag, "revoke", false, "revoke current authentication")
+	authCmd.Flags().BoolVar(&revokeFlag, "revoke", false, "clear local authentication")
 	authCmd.Flags().BoolVar(&statusOnly, "status", false, "check authentication status only")
-	authCmd.Flags().BoolVar(&useDeviceFlow, "device-flow", false, "force device flow authentication")
-	authCmd.Flags().BoolVar(&useLocalServer, "local-server", false, "force local server authentication")
-	authCmd.Flags().StringVar(&customCredFile, "custom-creds", "", "path to custom credentials JSON file")
 }
 
 func runAuth(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-
-	// Determine authentication flow
-	flow := calendar.AuthFlowAuto
-	if useDeviceFlow {
-		flow = calendar.AuthFlowDeviceCode
-	} else if useLocalServer {
-		flow = calendar.AuthFlowLocalServer
-	}
-
-	// Setup auth options
+	// Setup auth options for relay service (uses build-time injected URL)
 	opts := &calendar.AuthOptions{
-		Flow:     flow,
-		CredPath: customCredFile,
+		UseRelay: true,
+		// RelayURL will use the build-time injected value by default
 	}
 
 	// Initialize auth manager
@@ -84,13 +57,13 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Handle revoke
+	// Handle revoke (clear local token)
 	if revokeFlag {
-		fmt.Printf("%s Revoking authentication...\n", nerdfonts.InfoCircle)
-		if err := authManager.RevokeToken(ctx); err != nil {
-			return fmt.Errorf("failed to revoke token: %w", err)
+		fmt.Printf("%s Clearing authentication...\n", nerdfonts.InfoCircle)
+		if err := authManager.ClearLocalToken(); err != nil {
+			return fmt.Errorf("failed to clear authentication: %w", err)
 		}
-		fmt.Printf("%s Authentication revoked successfully\n", nerdfonts.CheckCircle)
+		fmt.Printf("%s Authentication cleared successfully\n", nerdfonts.CheckCircle)
 		return nil
 	}
 
@@ -101,17 +74,12 @@ func runAuth(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Perform authentication
-	if flow == calendar.AuthFlowDeviceCode {
-		fmt.Printf("%s Starting simplified authentication...\n", nerdfonts.InfoCircle)
-	} else {
-		fmt.Printf("%s Starting authentication flow...\n", nerdfonts.InfoCircle)
-		fmt.Println("This will open your browser to complete Google Calendar authorization.")
-		fmt.Println("If the browser doesn't open automatically, please copy and paste the URL manually.")
-		fmt.Println()
-	}
+	// Perform authentication via relay service
+	fmt.Printf("%s Starting authentication...\n", nerdfonts.InfoCircle)
+	fmt.Println("This will open your browser to complete Google Calendar authorization.")
+	fmt.Println()
 
-	// Create a temporary calendar client to trigger auth flow
+	// Create a calendar client to trigger auth flow
 	_, err = calendar.NewClient(cacheDir, opts)
 	if err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
