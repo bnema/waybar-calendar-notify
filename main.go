@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/bnema/waybar-calendar-notify/cmd"
+	"github.com/bnema/waybar-calendar-notify/internal/logger"
 )
 
 // Build-time variables injected by ldflags
@@ -19,7 +19,7 @@ func main() {
 	cmd.SetVersionInfo(Version, CommitHash, BuildTime)
 	
 	if err := cmd.Execute(); err != nil {
-		log.Printf("Error: %v", err)
+		logger.Error("Command execution failed", "error", err)
 		os.Exit(1)
 	}
 }
