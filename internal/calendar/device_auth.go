@@ -370,10 +370,30 @@ func (d *DeviceAuthManager) GetOAuth2Client(ctx context.Context, token *oauth2.T
 	return config.Client(ctx, token)
 }
 
-// loadClientSecrets loads and validates the OAuth client secrets from the JSON file
+//garble:controlflow flatten_passes=1 junk_jumps=3
 func LoadClientSecrets(path string) (*ClientSecrets, error) {
+	// Try embedded secrets first if no path provided or path is "embedded"
+	if path == "" || path == "embedded" {
+		embeddedSecrets, err := LoadEmbeddedSecrets()
+		if err == nil {
+			return embeddedSecrets, nil
+		}
+		// If embedded fails and no path, return error
+		if path == "" {
+			return nil, fmt.Errorf("embedded secrets unavailable and no file path provided: %w", err)
+		}
+	}
+	
+	// Try file-based loading
 	data, err := os.ReadFile(path)
 	if err != nil {
+		// Try embedded as final fallback if file doesn't exist
+		if os.IsNotExist(err) {
+			embeddedSecrets, embeddedErr := LoadEmbeddedSecrets()
+			if embeddedErr == nil {
+				return embeddedSecrets, nil
+			}
+		}
 		return nil, fmt.Errorf("failed to read client secrets file '%s': %w", path, err)
 	}
 
