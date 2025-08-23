@@ -7,7 +7,7 @@ const (
 	// Public OAuth 2.0 Client ID for Device Flow
 	// This is safe to embed - it's a public identifier, not a secret
 	// Device flow apps use a publicly distributed client ID
-	GoogleOAuthClientID = "932772530018-fsdvskkmjbpkke2a3q2krmhbr9u2e6eh.apps.googleusercontent.com"
+	GoogleOAuthClientID = "551320158078-1hph2krp8sdkqp2nekpecvb7falo31q0.apps.googleusercontent.com"
 
 	// OAuth 2.0 endpoints
 	DeviceAuthURL = "https://oauth2.googleapis.com/device/code"
