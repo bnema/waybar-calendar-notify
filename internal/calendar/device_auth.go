@@ -21,12 +21,13 @@ import (
 
 // DeviceAuthManager handles OAuth 2.0 device flow authentication
 type DeviceAuthManager struct {
-	clientID   string
-	tokenPath  string
-	cacheDir   string
-	httpClient *http.Client
-	encryptor  *security.TokenEncryptor
-	logger     *security.SecureLogger
+	clientID     string
+	clientSecret string
+	tokenPath    string
+	cacheDir     string
+	httpClient   *http.Client
+	encryptor    *security.TokenEncryptor
+	logger       *security.SecureLogger
 }
 
 // DeviceCodeResponse represents the response from the device authorization endpoint
@@ -72,14 +73,38 @@ func NewDeviceAuthManager(cacheDir string, verbose bool) (*DeviceAuthManager, er
 	// Initialize secure logger
 	logger := security.NewSecureLogger(verbose)
 
-	return &DeviceAuthManager{
-		clientID:   GoogleOAuthClientID,
-		tokenPath:  filepath.Join(cacheDir, "token.enc"),
-		cacheDir:   cacheDir,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		encryptor:  encryptor,
-		logger:     logger,
-	}, nil
+	// Allow environment variable overrides so users can supply their own OAuth client
+clientID := GoogleOAuthClientID
+if envID := os.Getenv("WAYBAR_GCAL_CLIENT_ID"); envID != "" {
+	clientID = envID
+}
+clientSecret := GoogleOAuthClientSecret
+if envSecret := os.Getenv("WAYBAR_GCAL_CLIENT_SECRET"); envSecret != "" {
+	clientSecret = envSecret
+}
+
+// Validate that required OAuth credentials are present
+if clientID == "" {
+	return nil, fmt.Errorf("OAuth client ID is required: set WAYBAR_GCAL_CLIENT_ID environment variable or embed at build time")
+}
+if clientSecret == "" {
+	return nil, fmt.Errorf("OAuth client secret is required: set WAYBAR_GCAL_CLIENT_SECRET environment variable or embed at build time")
+}
+
+logger.LogAuthEvent("oauth_credentials_loaded", true, map[string]any{
+	"client_id":       security.RedactString(clientID),
+	"secret_provided": clientSecret != "",
+})
+
+return &DeviceAuthManager{
+	clientID:     clientID,
+	clientSecret: clientSecret,
+	tokenPath:    filepath.Join(cacheDir, "token.enc"),
+	cacheDir:     cacheDir,
+	httpClient:   &http.Client{Timeout: 30 * time.Second},
+	encryptor:    encryptor,
+	logger:       logger,
+}, nil
 }
 
 // AuthenticateDevice performs the complete OAuth 2.0 device flow
@@ -246,12 +271,17 @@ func (d *DeviceAuthManager) pollForToken(ctx context.Context, deviceResp *Device
 }
 
 // exchangeDeviceCode exchanges the device code for an access token
-// Note: For device flow, only client_id is needed, not client_secret
+// Note: Google's implementation requires client_secret despite device flow design principles
 func (d *DeviceAuthManager) exchangeDeviceCode(ctx context.Context, deviceCode string) (*oauth2.Token, error) {
 	params := url.Values{
 		"client_id":   {d.clientID},
 		"device_code": {deviceCode},
 		"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
+	}
+	// For public device flow clients (installed apps / CLI) a client_secret is NOT required and should usually be omitted.
+	// Only include it if one has explicitly been configured.
+	if d.clientSecret != "" {
+		params.Set("client_secret", d.clientSecret)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", TokenURL, strings.NewReader(params.Encode()))
@@ -300,10 +330,27 @@ func (d *DeviceAuthManager) exchangeDeviceCode(ctx context.Context, deviceCode s
 		return nil, fmt.Errorf("unexpected status code %d and failed to decode error", resp.StatusCode)
 	}
 
-	return nil, &PollError{
-		ErrorCode:   errResp.Error,
-		Description: errResp.ErrorDescription,
+	// Log detailed error for diagnostics (without sensitive data)
+if d.logger != nil {
+	// We don't log the raw device code.
+	d.logger.LogAuthEvent("device_token_error", false, map[string]any{
+		"error":             errResp.Error,
+		"error_description": errResp.ErrorDescription,
+		"status":            resp.StatusCode,
+	})
+}
+// Special guidance when server demands a client_secret we don't have
+if errResp.ErrorDescription != "" && strings.Contains(strings.ToLower(errResp.ErrorDescription), "client_secret") && d.clientSecret == "" {
+	if d.logger != nil {
+		d.logger.LogAuthEvent("device_token_missing_secret", false, map[string]any{
+			"hint": "Google is asking for client_secret. Use an OAuth client of type 'TVs and Limited Input devices' or 'Installed app'. These may still require a secret now. Set WAYBAR_GCAL_CLIENT_ID/SECRET env vars if needed.",
+		})
 	}
+}
+return nil, &PollError{
+	ErrorCode:   errResp.Error,
+	Description: errResp.ErrorDescription,
+}
 }
 
 // SaveToken saves the token using the same encryption as the relay flow
