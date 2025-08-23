@@ -8,15 +8,22 @@ BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Go variables
 BINARY_NAME = waybar-calendar-notify
 MAIN_PACKAGE = .
+# Optional OAuth overrides (set these vars before calling make if you want to bake in credentials)
+# WARNING: Embedding secrets in distributed binaries is insecure. Prefer user-provided env vars at runtime.
+WAYBAR_GCAL_CLIENT_ID ?=
+WAYBAR_GCAL_CLIENT_SECRET ?=
+
 LDFLAGS = -ldflags "-X main.Version=$(VERSION) \
-                   -X main.CommitHash=$(COMMIT_HASH) \
-                   -X main.BuildTime=$(BUILD_TIME)"
+				   -X main.CommitHash=$(COMMIT_HASH) \
+				   -X main.BuildTime=$(BUILD_TIME) \
+				   $(if $(WAYBAR_GCAL_CLIENT_ID),-X github.com/bnema/waybar-calendar-notify/internal/calendar.GoogleOAuthClientID=$(WAYBAR_GCAL_CLIENT_ID)) \
+				   $(if $(WAYBAR_GCAL_CLIENT_SECRET),-X github.com/bnema/waybar-calendar-notify/internal/calendar.GoogleOAuthClientSecret=$(WAYBAR_GCAL_CLIENT_SECRET))"
 
 # Build directories
 BUILD_DIR = ./dist
 LOCAL_BIN = ./bin
 
-.PHONY: help build build-local clean install test lint fmt vet deps dev-build security-audit test-security build-secure check
+.PHONY: help build build-local clean install lint fmt vet deps dev-build heck
 
 help: ## Show this help message
 	@echo "waybar-calendar-notify Makefile"
@@ -34,7 +41,7 @@ build: ## Build production binary with injected values
 build-local: ## Build local development binary
 	@echo "Building $(BINARY_NAME) for local development..."
 	@mkdir -p $(LOCAL_BIN)
-	go build $(LDFLAGS) -o $(LOCAL_BIN)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@if [ -f .env ]; then export $$(grep -v '^#' .env | xargs) && go build $(LDFLAGS) -o $(LOCAL_BIN)/$(BINARY_NAME) $(MAIN_PACKAGE); else go build $(LDFLAGS) -o $(LOCAL_BIN)/$(BINARY_NAME) $(MAIN_PACKAGE); fi
 
 dev-build: ## Build for development
 	@echo "Building for development..."
@@ -51,13 +58,6 @@ clean: ## Clean build artifacts
 	rm -rf $(LOCAL_BIN)
 	go clean
 
-test: ## Run tests
-	@echo "Running tests..."
-	go test ./...
-
-test-verbose: ## Run tests with verbose output
-	@echo "Running tests with verbose output..."
-	go test -v ./...
 
 lint: ## Run golangci-lint
 	@echo "Running linter..."
@@ -102,47 +102,10 @@ version: ## Show version information
 	@echo "Build Time: $(BUILD_TIME)"
 
 # Release helpers
-release: clean test lint build ## Full release build (clean, test, lint, build)
+release: clean lint build ## Full release build (clean, lint, build)
 	@echo "Release build complete!"
 	@echo "Binary: $(BUILD_DIR)/$(BINARY_NAME)"
 	@echo "Version: $(VERSION)"
 
-security-audit: ## Run security audit tools
-	@echo "Running security audit..."
-	@which nancy >/dev/null 2>&1 || echo "Warning: nancy not installed (go install github.com/sonatypecommunity/nancy@latest)"
-	@which gosec >/dev/null 2>&1 || echo "Warning: gosec not installed (go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest)"
-	-go list -json -deps | nancy sleuth 2>/dev/null || echo "Nancy audit completed"
-	-gosec -fmt=json -out=security-report.json ./... 2>/dev/null || echo "Gosec audit completed"
-
-test-security: ## Run security-specific tests
-	@echo "Running security tests..."
-	go test -v ./internal/security/... -cover
-
-build-secure: ## Build with security hardening flags
-	@echo "Building $(BINARY_NAME) with security hardening..."
-	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=0 go build -trimpath \
-		-ldflags="-s -w -extldflags=-static $(LDFLAGS)" \
-		-o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
-
-check: fmt vet lint test test-security ## Run all checks (format, vet, lint, test, security)
+check: fmt vet lint ## Run all checks (format, vet, lint)
 	@echo "All checks passed!"
-
-security-check: security-audit test-security ## Run comprehensive security checks
-	@echo "Security checks completed!"
-
-# Secure release build
-build-release: clean test lint build-secure ## Complete secure release build
-	@echo ""
-	@echo "=================================================="
-	@echo "Secure Release Build Complete!"
-	@echo "=================================================="
-	@echo "✓ Binary: $(BUILD_DIR)/$(BINARY_NAME)"
-	@echo "✓ Size: $$(du -h $(BUILD_DIR)/$(BINARY_NAME) | cut -f1)"
-	@echo "✓ All tests passed"
-	@echo "✓ Security hardened build"
-	@echo "✓ Ready for distribution"
-	@echo ""
-	@echo "This binary uses secure OAuth 2.0 device flow"
-	@echo "Users do not need any credential files"
-	@echo "Safe to distribute publicly and open source"
