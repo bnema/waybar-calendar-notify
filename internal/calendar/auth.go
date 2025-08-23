@@ -241,11 +241,16 @@ func (a *AuthManager) refreshTokenForDeviceFlow(ctx context.Context, token *oaut
 	})
 
 	// Create refresh request to Google's token endpoint
-	// For device flow, only client_id is needed, not client_secret
+	// Google's implementation requires client_secret for refresh tokens as well
 	params := url.Values{
 		"client_id":     {GoogleOAuthClientID},
 		"refresh_token": {token.RefreshToken},
 		"grant_type":    {"refresh_token"},
+	}
+	// For installed/device apps Google does not require a client_secret (and installed app credentials don't even have one).
+	// Only include if explicitly configured with a non-empty secret for a confidential client.
+	if GoogleOAuthClientSecret != "" {
+		params.Set("client_secret", GoogleOAuthClientSecret)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", TokenURL, strings.NewReader(params.Encode()))
