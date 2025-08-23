@@ -48,9 +48,14 @@ dev-build: ## Build for development
 	@mkdir -p $(LOCAL_BIN)
 	$(MAKE) build-local
 
-install: build ## Install binary to GOPATH/bin
+install: ## Install binary to GOPATH/bin with env vars
 	@echo "Installing $(BINARY_NAME) to GOPATH/bin..."
-	go install $(LDFLAGS) $(MAIN_PACKAGE)
+	@if [ -f .env ]; then \
+		export $$(grep -v '^#' .env | xargs); \
+		go install -ldflags "-X main.Version=$(VERSION) -X main.CommitHash=$(COMMIT_HASH) -X main.BuildTime=$(BUILD_TIME) -X github.com/bnema/waybar-calendar-notify/internal/calendar.GoogleOAuthClientID=$$WAYBAR_GCAL_CLIENT_ID -X github.com/bnema/waybar-calendar-notify/internal/calendar.GoogleOAuthClientSecret=$$WAYBAR_GCAL_CLIENT_SECRET" $(MAIN_PACKAGE); \
+	else \
+		go install $(LDFLAGS) $(MAIN_PACKAGE); \
+	fi
 
 clean: ## Clean build artifacts
 	@echo "Cleaning build artifacts..."
