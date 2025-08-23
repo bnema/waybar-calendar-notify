@@ -52,11 +52,11 @@ func (of *OutputFormatter) FormatCalendarOutput(allEvents []cache.CacheEntry, no
 	// Separate events by status
 	currentEvents := of.filterCurrentEvents(allEvents, now)
 	upcomingEvents := of.filterUpcomingTodayEvents(allEvents, now)
-	
+
 	text := of.generateStatusText(currentEvents, upcomingEvents, now)
 	tooltip := of.generateTooltip(allEvents, now)
 	class := of.determineClass(currentEvents, upcomingEvents, now)
-	
+
 	return WaybarOutput{
 		Text:    text,
 		Tooltip: tooltip,
@@ -100,7 +100,7 @@ func (of *OutputFormatter) generateTooltip(allEvents []cache.CacheEntry, now tim
 
 	// Get today's events
 	todaysEvents := of.filterTodaysEvents(allEvents, now)
-	
+
 	if len(todaysEvents) == 0 {
 		lines = append(lines, fmt.Sprintf("%s No events today", nerdfonts.Calendar))
 		return strings.Join(lines, "\n")
@@ -108,7 +108,7 @@ func (of *OutputFormatter) generateTooltip(allEvents []cache.CacheEntry, now tim
 
 	// Sort events by start time
 	events := of.sortEventsByStartTime(todaysEvents)
-	
+
 	// Limit the number of events shown
 	maxEvents := of.maxTooltipEvents
 	if len(events) > maxEvents {
@@ -137,11 +137,11 @@ func (of *OutputFormatter) generateTooltip(allEvents []cache.CacheEntry, now tim
 
 func (of *OutputFormatter) formatEventForTooltip(event cache.CacheEntry, now time.Time) []string {
 	var lines []string
-	
+
 	// Determine event status symbol and time
 	var symbol string
 	var timeStr string
-	
+
 	if event.IsCurrentAt(now) {
 		symbol = nerdfonts.CircleDot // Current event
 		if event.IsAllDay {
@@ -182,7 +182,7 @@ func (of *OutputFormatter) determineClass(currentEvents, upcomingEvents []cache.
 	if len(currentEvents) > 0 {
 		return "active"
 	}
-	
+
 	if len(upcomingEvents) > 0 {
 		// Check if any event is starting soon (within 15 minutes)
 		for _, event := range upcomingEvents {
@@ -192,7 +192,7 @@ func (of *OutputFormatter) determineClass(currentEvents, upcomingEvents []cache.
 		}
 		return "upcoming"
 	}
-	
+
 	return "idle"
 }
 
@@ -208,7 +208,7 @@ func (of *OutputFormatter) filterCurrentEvents(events []cache.CacheEntry, now ti
 
 func (of *OutputFormatter) filterUpcomingTodayEvents(events []cache.CacheEntry, now time.Time) []cache.CacheEntry {
 	endOfDay := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
-	
+
 	var upcoming []cache.CacheEntry
 	for _, event := range events {
 		if event.IsUpcomingAt(now) && event.StartTime.Before(endOfDay) {
@@ -236,7 +236,7 @@ func (of *OutputFormatter) sortEventsByStartTime(events []cache.CacheEntry) []ca
 	// Simple bubble sort for small arrays
 	sorted := make([]cache.CacheEntry, len(events))
 	copy(sorted, events)
-	
+
 	for i := 0; i < len(sorted); i++ {
 		for j := i + 1; j < len(sorted); j++ {
 			if sorted[i].StartTime.After(sorted[j].StartTime) {
@@ -244,7 +244,7 @@ func (of *OutputFormatter) sortEventsByStartTime(events []cache.CacheEntry) []ca
 			}
 		}
 	}
-	
+
 	return sorted
 }
 
@@ -252,7 +252,7 @@ func (of *OutputFormatter) formatDuration(duration time.Duration) string {
 	if duration < 0 {
 		return "0m"
 	}
-	
+
 	if duration < time.Hour {
 		minutes := int(duration.Minutes())
 		return fmt.Sprintf("%dm", minutes)
@@ -260,11 +260,11 @@ func (of *OutputFormatter) formatDuration(duration time.Duration) string {
 
 	hours := int(duration.Hours())
 	minutes := int(duration.Minutes()) % 60
-	
+
 	if minutes == 0 {
 		return fmt.Sprintf("%dh", hours)
 	}
-	
+
 	return fmt.Sprintf("%dh%dm", hours, minutes)
 }
 

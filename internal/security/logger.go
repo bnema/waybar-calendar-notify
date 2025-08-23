@@ -39,19 +39,19 @@ var sensitivePatterns = []*regexp.Regexp{
 	// OAuth tokens and authorization headers
 	regexp.MustCompile(`(?i)(access_token|refresh_token|authorization)["':\s]*["']?([A-Za-z0-9\-._~+/]+=*)`),
 	regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9\-._~+/]+=*`),
-	
+
 	// API keys and secrets
 	regexp.MustCompile(`(?i)(api_key|client_secret|client_id)["':\s]*["']?([A-Za-z0-9\-._~+/]{16,})`),
-	
+
 	// Session IDs and CSRF tokens
 	regexp.MustCompile(`(?i)(session_id|csrf_token|nonce)["':\s]*["']?([A-Za-z0-9\-._~+/]{16,})`),
-	
+
 	// URLs with embedded tokens
 	regexp.MustCompile(`(https?://[^\s]*[?&](?:token|key|secret)=)([A-Za-z0-9\-._~+/]+=*)`),
-	
+
 	// Email addresses (privacy)
 	regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`),
-	
+
 	// Potential passwords or passphrases
 	regexp.MustCompile(`(?i)(password|passphrase|pwd)["':\s]*["']?([^\s"',]{8,})`),
 }
@@ -59,7 +59,7 @@ var sensitivePatterns = []*regexp.Regexp{
 // NewSecureLogger creates a new secure logger with redaction capabilities
 func NewSecureLogger(verbose bool) *SecureLogger {
 	var handler slog.Handler
-	
+
 	if verbose {
 		opts := &slog.HandlerOptions{
 			Level: slog.LevelInfo,
@@ -86,7 +86,7 @@ func NewSecureLogger(verbose bool) *SecureLogger {
 // NewSecureLoggerWithLevel creates a secure logger with specified log level
 func NewSecureLoggerWithLevel(level slog.Level, verbose bool) *SecureLogger {
 	var handler slog.Handler
-	
+
 	if verbose {
 		opts := &slog.HandlerOptions{
 			Level: level,
@@ -211,7 +211,7 @@ func (sl *SecureLogger) WithContext(attrs ...any) *SecureLogger {
 // redactSensitiveData applies redaction patterns to remove sensitive information
 func redactSensitiveData(input string) string {
 	result := input
-	
+
 	for _, pattern := range sensitivePatterns {
 		result = pattern.ReplaceAllStringFunc(result, func(match string) string {
 			// For patterns with groups, preserve the first group and redact the second
@@ -223,7 +223,7 @@ func redactSensitiveData(input string) string {
 			return "[REDACTED]"
 		})
 	}
-	
+
 	return result
 }
 

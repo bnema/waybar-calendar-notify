@@ -6,18 +6,19 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	gcal "google.golang.org/api/calendar/v3"
+
 	"github.com/bnema/waybar-calendar-notify/internal/config"
 	"github.com/bnema/waybar-calendar-notify/internal/logger"
+	gcal "google.golang.org/api/calendar/v3"
 )
 
 type Client struct {
 	authManager *AuthManager
 	service     *CalendarService
-	config      *config.CalendarConfig  // Calendar configuration
+	config      *config.CalendarConfig // Calendar configuration
 }
 
-func NewClient(cacheDir string, opts *AuthOptions, verbose bool, cfg *config.CalendarConfig) (*Client, error) {
+func NewClient(cacheDir string, verbose bool, cfg *config.CalendarConfig) (*Client, error) {
 	if cacheDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -26,7 +27,7 @@ func NewClient(cacheDir string, opts *AuthOptions, verbose bool, cfg *config.Cal
 		cacheDir = filepath.Join(homeDir, ".cache", "waybar-calendar-notify")
 	}
 
-	authManager, err := NewAuthManager(cacheDir, opts, verbose)
+	authManager, err := NewAuthManager(cacheDir, verbose)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create auth manager: %w", err)
 	}
@@ -48,7 +49,7 @@ func (c *Client) GetTodaysEvents() ([]Event, error) {
 	now := time.Now()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	endOfDay := startOfDay.Add(24 * time.Hour).Add(-time.Nanosecond)
-	
+
 	// Determine which calendars to fetch from
 	var calendarIDs []string
 	if c.config != nil && !c.config.PrimaryOnly {
@@ -70,7 +71,7 @@ func (c *Client) GetTodaysEvents() ([]Event, error) {
 	} else {
 		calendarIDs = []string{"primary"}
 	}
-	
+
 	logger.Info("fetching today's events", "calendar_count", len(calendarIDs))
 	return c.service.GetEventsInRangeForCalendars(ctx, startOfDay, endOfDay, calendarIDs)
 }

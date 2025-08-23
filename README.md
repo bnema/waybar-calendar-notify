@@ -4,46 +4,63 @@ A CLI tool that integrates Google Calendar with Waybar, providing real-time cale
 
 ## Features
 
-- Fetch Google Calendar events via OAuth 2.0 device flow
+- Secure OAuth 2.0 device flow authentication
 - Output calendar data in Waybar JSON format with tooltips
 - Send desktop notifications for upcoming events
 - Cache events locally for performance
 - Support for multiple output formats (JSON, text)
+- Requires your own Google OAuth credentials
 
-## Google Cloud Setup
+## Authentication
 
-To use your own Google Calendar credentials:
+This app uses **Google OAuth 2.0 Device Flow** for secure authentication. You must provide your own Google OAuth client credentials.
 
-### 1. Create Google Cloud Project
+### Setting Up Google OAuth Credentials
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable the Google Calendar API:
-   - Go to "APIs & Services" > "Library"
-   - Search for "Google Calendar API"
-   - Click "Enable"
+1. **Create or Select Google Cloud Project**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
 
-### 2. Configure OAuth Consent Screen
+2. **Enable Google Calendar API**:
+   - Go to [API Library](https://console.developers.google.com/apis/library)
+   - Search for "Google Calendar API" and click on it
+   - Click "Enable" button
 
-1. Go to "APIs & Services" > "OAuth consent screen"
-2. Choose "External" user type (unless you have Google Workspace)
-3. Fill required fields:
-   - App name: `waybar-calendar-notify`
-   - User support email: your email
-   - Developer contact: your email
-4. Add scopes:
-   - `https://www.googleapis.com/auth/calendar.readonly`
-5. Add your email to test users
+3. **Configure OAuth Consent Screen** (first time only):
+   - Go to "APIs & Services" → "OAuth consent screen"
+   - Choose "External" user type
+   - Fill in Application name (e.g., "Personal Calendar Notify")
+   - Add your email in required fields
+   - Click "Save and Continue"
 
-### 3. Create OAuth Credentials
+4. **Create OAuth Client ID**:
+   - Go to "APIs & Services" → "Credentials"
+   - Click "Create Credentials" → "OAuth client ID"
+   - Choose "TV and Limited-Input devices" as application type
+   - Enter a name (e.g., "waybar-calendar-notify")
+   - Click "Create"
 
-1. Go to "APIs & Services" > "Credentials"
-2. Click "Create Credentials" > "OAuth client ID"
-3. Select "Desktop application"
-4. Name it `waybar-calendar-notify`
-5. Download the JSON file
-6. Rename it to `client_secrets_device_oauth.json`
-7. Place it in the project root directory
+5. **Download Credentials**:
+   - **Important**: Download the JSON file immediately (you can only see the client secret once)
+   - Open the downloaded JSON file
+   - Copy the `client_id` and `client_secret` values
+   - Create `.env` file in project directory with:
+     ```
+     WAYBAR_GCAL_CLIENT_ID=your_client_id_here
+     WAYBAR_GCAL_CLIENT_SECRET=your_client_secret_here
+     ```
+
+### First Time Setup
+1. Run: `waybar-calendar-notify auth`
+2. Visit the URL shown and enter the code displayed
+3. Authorize the app in your browser with your Google account
+4. That's it! The app will securely store your tokens locally
+
+### Security
+- Uses OAuth 2.0 Device Flow (RFC 8628) - the same method used by major CLI tools
+- OAuth credentials are embedded at build time from your environment
+- Tokens are encrypted and stored locally with restrictive permissions
+- Requires your own Google Cloud OAuth client for personal use
 
 ## Installation
 
@@ -54,25 +71,15 @@ To use your own Google Calendar credentials:
 git clone https://github.com/bnema/waybar-calendar-notify.git
 cd waybar-calendar-notify
 
-# Place your client_secrets_device_oauth.json in project root
+# Create .env file with your Google OAuth credentials (required)
+echo "WAYBAR_GCAL_CLIENT_ID=your_client_id_here" > .env
+echo "WAYBAR_GCAL_CLIENT_SECRET=your_client_secret_here" >> .env
 
-# Build
-make build
-
-# Or build locally for development
+# Build locally with credentials from .env
 make build-local
-```
 
-### Build Obfuscated (Optional)
-
-To embed credentials in the binary:
-
-```bash
-# Install garble
-go install mvdan.cc/garble@latest
-
-# Build obfuscated binary with embedded secrets
-make build-obfuscated-release
+# Or build for production with credentials as environment variables
+WAYBAR_GCAL_CLIENT_ID=your_id WAYBAR_GCAL_CLIENT_SECRET=your_secret make build
 ```
 
 ## Usage
@@ -86,7 +93,7 @@ make build-obfuscated-release
 # Check authentication status
 ./bin/waybar-calendar-notify auth --status
 
-# Revoke authentication
+# Clear local authentication (forces re-auth)
 ./bin/waybar-calendar-notify auth --revoke
 ```
 
@@ -163,21 +170,21 @@ systemctl --user start waybar-calendar-notify.service
 
 The tool uses these configuration files:
 - `~/.config/waybar-calendar-notify/config.yaml` - Main configuration
-- `~/.config/waybar-calendar-notify/token.json` - OAuth token (auto-generated)
+- `~/.cache/waybar-calendar-notify/token.enc` - Encrypted OAuth tokens (auto-generated securely)
 
 ## Development
 
 ```bash
-# Run tests
-make test
-
 # Run linter
 make lint
 
 # Format code
 make fmt
 
-# Full check
+# Run go vet
+make vet
+
+# Run all checks (format, vet, lint)
 make check
 ```
 

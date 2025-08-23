@@ -141,7 +141,7 @@ func getMachineID() (string, error) {
 	hostname, _ := os.Hostname()
 	uid := os.Getuid()
 	fallback := fmt.Sprintf("%s-%d", hostname, uid)
-	
+
 	if len(fallback) < 8 {
 		return "fallback-machine-id", nil
 	}

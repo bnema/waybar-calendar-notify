@@ -70,56 +70,55 @@ func (sc *SecureConfig) Validate() error {
 	// Validate log level
 	validLogLevels := []string{"debug", "info", "warn", "error"}
 	if !contains(validLogLevels, sc.LogLevel) {
-		return security.NewConfigError("LogLevel", sc.LogLevel, 
+		return security.NewConfigError("LogLevel", sc.LogLevel,
 			fmt.Sprintf("must be one of: %s", strings.Join(validLogLevels, ", ")))
 	}
 
 	// Validate timeouts
 	if sc.RequestTimeout < 5*time.Second {
-		return security.NewConfigError("RequestTimeout", sc.RequestTimeout.String(), 
+		return security.NewConfigError("RequestTimeout", sc.RequestTimeout.String(),
 			"must be at least 5 seconds")
 	}
 
 	if sc.RequestTimeout > 5*time.Minute {
-		return security.NewConfigError("RequestTimeout", sc.RequestTimeout.String(), 
+		return security.NewConfigError("RequestTimeout", sc.RequestTimeout.String(),
 			"must not exceed 5 minutes")
 	}
 
 	if sc.CSRFTokenLifetime < 5*time.Minute {
-		return security.NewConfigError("CSRFTokenLifetime", sc.CSRFTokenLifetime.String(), 
+		return security.NewConfigError("CSRFTokenLifetime", sc.CSRFTokenLifetime.String(),
 			"must be at least 5 minutes")
 	}
 
 	if sc.MaxTokenAge < 1*time.Hour {
-		return security.NewConfigError("MaxTokenAge", sc.MaxTokenAge.String(), 
+		return security.NewConfigError("MaxTokenAge", sc.MaxTokenAge.String(),
 			"must be at least 1 hour")
 	}
 
 	return nil
 }
 
-
 // GetCertificatePins returns certificate pins for known hosts
 func (sc *SecureConfig) GetCertificatePins() map[string]string {
 	pins := make(map[string]string)
-	
+
 	// Certificate pinning is not required for Google OAuth endpoints
 	// as they use standard trusted CAs. This method exists for potential
 	// future use with custom endpoints.
-	
+
 	return pins
 }
 
 // GetSecurityHeaders returns standard security headers for requests
 func (sc *SecureConfig) GetSecurityHeaders() map[string]string {
 	return map[string]string{
-		"User-Agent":                "waybar-calendar-notify/1.0",
-		"Accept":                    "application/json",
-		"Cache-Control":             "no-cache",
-		"X-Requested-With":          "waybar-calendar-notify",
-		"Sec-Fetch-Dest":           "empty",
-		"Sec-Fetch-Mode":           "cors",
-		"Sec-Fetch-Site":           "cross-site",
+		"User-Agent":       "waybar-calendar-notify/1.0",
+		"Accept":           "application/json",
+		"Cache-Control":    "no-cache",
+		"X-Requested-With": "waybar-calendar-notify",
+		"Sec-Fetch-Dest":   "empty",
+		"Sec-Fetch-Mode":   "cors",
+		"Sec-Fetch-Site":   "cross-site",
 	}
 }
 
@@ -130,7 +129,7 @@ func (sc *SecureConfig) CreateTLSConfig() *TLSConfig {
 		EnableCertPinning:  sc.EnableCertPinning,
 		CertificatePins:    sc.GetCertificatePins(),
 		DisableCompression: true,
-		RequireSNI:        true,
+		RequireSNI:         true,
 	}
 }
 
@@ -163,5 +162,5 @@ type TLSConfig struct {
 	EnableCertPinning  bool
 	CertificatePins    map[string]string
 	DisableCompression bool
-	RequireSNI        bool
+	RequireSNI         bool
 }

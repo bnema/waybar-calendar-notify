@@ -45,7 +45,7 @@ var defaultConfig = Config{
 		ShowDescription:  true,
 	},
 	Calendars: CalendarConfig{
-		PrimaryOnly: false,  // Changed from true to false to enable multi-calendar support
+		PrimaryOnly: false,      // Changed from true to false to enable multi-calendar support
 		CalendarIDs: []string{}, // Empty means auto-discover all calendars
 	},
 }
@@ -116,7 +116,7 @@ func setDefaults(v *viper.Viper) {
 
 func createDefaultConfig(configPath string) error {
 	// Ensure config directory exists
-	if err := os.MkdirAll(configPath, 0755); err != nil {
+	if err := os.MkdirAll(configPath, 0750); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -146,7 +146,7 @@ primary_only = true  # set to false to use calendar_ids
 calendar_ids = []    # specific calendar IDs to watch
 `
 
-	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configFile, []byte(configContent), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

@@ -8,10 +8,7 @@ waybar-calendar-notify
 waybar-calendar-notify-obfuscated
 waybar-calendar-notify-obfuscated.original
 bin/
-.garble-seed
-.build-timestamp
-internal/calendar/embedded_secrets_data.go
-
+dist/
 # Cache and temporary files
 .cache/
 *.log
