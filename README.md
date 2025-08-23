@@ -4,16 +4,51 @@ A CLI tool that integrates Google Calendar with Waybar, providing real-time cale
 
 ## Features
 
-- Secure OAuth 2.0 device flow authentication - no credentials needed!
+- Secure OAuth 2.0 device flow authentication
 - Output calendar data in Waybar JSON format with tooltips
 - Send desktop notifications for upcoming events
 - Cache events locally for performance
 - Support for multiple output formats (JSON, text)
-- Safe to distribute and open source
+- Requires your own Google OAuth credentials
 
 ## Authentication
 
-This app uses **Google OAuth 2.0 Device Flow** - no client secrets or credentials are needed! The authentication flow is completely secure and follows industry best practices.
+This app uses **Google OAuth 2.0 Device Flow** for secure authentication. You must provide your own Google OAuth client credentials.
+
+### Setting Up Google OAuth Credentials
+
+1. **Create or Select Google Cloud Project**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+
+2. **Enable Google Calendar API**:
+   - Go to [API Library](https://console.developers.google.com/apis/library)
+   - Search for "Google Calendar API" and click on it
+   - Click "Enable" button
+
+3. **Configure OAuth Consent Screen** (first time only):
+   - Go to "APIs & Services" → "OAuth consent screen"
+   - Choose "External" user type
+   - Fill in Application name (e.g., "Personal Calendar Notify")
+   - Add your email in required fields
+   - Click "Save and Continue"
+
+4. **Create OAuth Client ID**:
+   - Go to "APIs & Services" → "Credentials"
+   - Click "Create Credentials" → "OAuth client ID"
+   - Choose "TV and Limited-Input devices" as application type
+   - Enter a name (e.g., "waybar-calendar-notify")
+   - Click "Create"
+
+5. **Download Credentials**:
+   - **Important**: Download the JSON file immediately (you can only see the client secret once)
+   - Open the downloaded JSON file
+   - Copy the `client_id` and `client_secret` values
+   - Create `.env` file in project directory with:
+     ```
+     WAYBAR_GCAL_CLIENT_ID=your_client_id_here
+     WAYBAR_GCAL_CLIENT_SECRET=your_client_secret_here
+     ```
 
 ### First Time Setup
 1. Run: `waybar-calendar-notify auth`
@@ -23,10 +58,9 @@ This app uses **Google OAuth 2.0 Device Flow** - no client secrets or credential
 
 ### Security
 - Uses OAuth 2.0 Device Flow (RFC 8628) - the same method used by major CLI tools
-- No embedded secrets or credentials in the application
+- OAuth credentials are embedded at build time from your environment
 - Tokens are encrypted and stored locally with restrictive permissions
-- Safe to distribute publicly and contribute to open source
-- No risk of credential leaks when sharing or publishing the binary
+- Requires your own Google Cloud OAuth client for personal use
 
 ## Installation
 
@@ -37,11 +71,15 @@ This app uses **Google OAuth 2.0 Device Flow** - no client secrets or credential
 git clone https://github.com/bnema/waybar-calendar-notify.git
 cd waybar-calendar-notify
 
-# Build - no credentials needed!
-make build
+# Create .env file with your Google OAuth credentials (required)
+echo "WAYBAR_GCAL_CLIENT_ID=your_client_id_here" > .env
+echo "WAYBAR_GCAL_CLIENT_SECRET=your_client_secret_here" >> .env
 
-# Or build locally for development
+# Build locally with credentials from .env
 make build-local
+
+# Or build for production with credentials as environment variables
+WAYBAR_GCAL_CLIENT_ID=your_id WAYBAR_GCAL_CLIENT_SECRET=your_secret make build
 ```
 
 ## Usage
@@ -49,7 +87,7 @@ make build-local
 ### Authentication
 
 ```bash
-# Authenticate with Google Calendar - no credentials needed!
+# Authenticate with Google Calendar
 ./bin/waybar-calendar-notify auth
 
 # Check authentication status
@@ -137,16 +175,16 @@ The tool uses these configuration files:
 ## Development
 
 ```bash
-# Run tests
-make test
-
 # Run linter
 make lint
 
 # Format code
 make fmt
 
-# Full check
+# Run go vet
+make vet
+
+# Run all checks (format, vet, lint)
 make check
 ```
 
